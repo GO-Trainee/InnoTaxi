@@ -14,7 +14,7 @@ InnoTaxi - приложение для заказа такси.
 User:
 1) User может зарегистрироваться. 
     - Поля для регистрации: name, phone number, email, password.
-2) User модет войти в систему.
+2) User может войти в систему.
     - Поля для входа: phone number, password.
 3) User может заказать такси. 
     - Поля заказа: type, from, to.
