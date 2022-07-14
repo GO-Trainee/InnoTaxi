@@ -90,3 +90,7 @@ Order:
   - По структуре проекта посматривать [сюда](https://github.com/golang-standards/project-layout).
   - Pre-commit hooks с golangci-lint.
   - Для тестирования использовать табличные тесты, gomock, testify/suite.
+3) Rust:
+  - Rocket или Actix-web для работы с HTTP. 
+  - Tokio для асинхронных операций.
+  - Diesel для миграций и работы с БД.
