@@ -52,7 +52,7 @@ Order:
 
 Схема приложения: 
 
-<img src="Design diagram.png" width="600" height="500" /> 
+<img src="Design diagram-v2.png" width="600" height="500" /> 
 
 
 Сервис аналитики: все регистрации и выполненные заказы должны записываться в аналитическую базу. 
