@@ -71,8 +71,14 @@ Order:
     - когда сделали pull request, пишем ментору, приступаем к новой задаче не дожидаясь ревью
     - если ментор оставит комментарии на pr, исправляем и заливаем изменения
     - если ментор аппрувит pr то заливаем его в dev
-  - PostgreSQL в качестве БД для driver, user и order сервисов.
-  - Cassandra в качестве БД для сервиса аналитики.
+  - PostgreSQL в качестве БД для user сервиса.
+  - MongoDB в качестве БД для user сериса (сбор логов).
+  - Redis в качестве кеша для user-service.
+  - Prometheus и Grafana в качестве сбора метрик с user service.
+  - В user service должны быть добавлены pprof хендлеры.
+  - Cassandra в качестве БД для driver service.
+  - Elasctic search для order service.
+  - ClickHouse в качестве БД для аналитики.
   - Kafka в качестве message broker.
   - Для RPC взаимодействия использовать GRPC или Twirp.
   - Для каждого сервиса должен быть описан Dockerfile.
