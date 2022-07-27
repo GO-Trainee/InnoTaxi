@@ -94,7 +94,7 @@ Order:
   - Для реализации ожидания юзером свободных водителей использовать горутины и каналы, при необходимости пакет sync.
   - Для миграций можно использовать Goose, другие решения допускаются.
   - По структуре проекта посматривать [сюда](https://github.com/golang-standards/project-layout).
-  - Pre-commit hooks с golangci-lint.
+  - CI/CD на GitHub actions со степами: 1) тесты, 2) линтер.
   - Для тестирования использовать табличные тесты, gomock, testify/suite.
 3) Rust:
   - Rocket или Actix-web для работы с HTTP. 
