@@ -95,7 +95,7 @@ Order:
   - Для миграций можно использовать Goose, другие решения допускаются.
   - По структуре проекта посматривать [сюда](https://github.com/golang-standards/project-layout).
   - CI/CD на GitHub actions со степами: 1) тесты, 2) линтер.
-  - Для тестирования использовать табличные тесты, gomock, testify/suite.
+  - Для тестирования использовать табличные тесты, gomock, testify/suite, ginkgo, gomega.
 3) Rust:
   - Rocket или Actix-web для работы с HTTP. 
   - Tokio для асинхронных операций.
