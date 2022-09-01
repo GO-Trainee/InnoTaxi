@@ -86,12 +86,11 @@ Order:
   - Swagger генерируется из аннотаций в коде.
 
 3) Driver service:
-  - Fiber в качестве HTTP фреймворка.
-  - Cassandra в качестве БД.
   - Сначала описывается swagger, потом из него генерируется код слоя хендлеров.
+  - Cassandra в качестве БД.
 
 4) Order service:
-  - Chi для работы с HTTP. 
+  - Fiber в качестве HTTP фреймворка.
   - Elasctic search для order service (возможность поиска по from или to созданных поездок).
 
 5) Analyst service:
