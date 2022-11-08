@@ -90,7 +90,7 @@ Order:
   - Cassandra в качестве БД.
 
 4) Order service:
-  - Fiber в качестве HTTP фреймворка.
+  - GraphQL для эндпоинтов вместо REST  
   - Elasctic search для order service (возможность поиска по from или to созданных поездок).
 
 5) Analyst service:
