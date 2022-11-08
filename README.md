@@ -94,7 +94,7 @@ Order:
   - Elasctic search для order service (возможность поиска по from или to созданных поездок).
 
 5) Analyst service:
-  - Echo в качестве HTTP фреймворка.
+  - Fiber в качестве HTTP фреймворка.
   - ClickHouse в качестве БД.
 
 6) General:
