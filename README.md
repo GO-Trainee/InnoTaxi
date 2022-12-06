@@ -91,6 +91,7 @@ Order:
 
 4) Order service:
   - GraphQL для эндпоинтов вместо REST  
+  - Эндпоинт для поиска по полям: DriverID, UserID, from, to. Реализовать частичный поиск (когда некоторые поля не указаны - должны игнорироваться).
   - Elasctic search для order service (возможность поиска по from или to созданных поездок).
 
 5) Analyst service:
