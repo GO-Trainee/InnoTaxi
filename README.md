@@ -89,7 +89,7 @@ Applications schema:
 
 <img src="Design-diagram-v3.png" width="600" height="500" /> 
 
-Adding new services is allowed, it is not allowed to reduce the number of services. When you change the scheme (add new services), the application must be supplemented with a diagram and put in the repository in .png and .drawio formats.
+Adding new services is allowed, it is not allowed to reduce the number of services. When you change the scheme (add new services), the application must be supplemented with a diagram and put in the repository in .png and .drawio formats. For each service you should create separate repository.
 
 Nonfunctional requirements:
 
