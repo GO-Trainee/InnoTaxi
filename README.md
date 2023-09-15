@@ -143,7 +143,8 @@ Technical requirements:
 - Kafka as a message broker.
 - For RPC interactions, use GRPC.
 - A Dockerfile must be described for each service.
-- The entire application should be run via docker-compose.
+- Each service must contain a Makefile to test, build, and deploy the service.
+- The entire infrastructure must be deployed in two environments: Docker via docker-compose and Kubernetes via Helm.
 - All variables to be changed (database connection, user's waiting time) must be set via environment variables.
 - Each service must have a README (describing what is needed to start it and environment variables) and a swagger (detailing all the endpoints).
 - All services must be covered by integration tests and Unit tests.
