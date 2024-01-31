@@ -102,6 +102,7 @@ Nonfunctional requirements:
 - When the pull request is done, write to the mentor and start a new task without waiting for a revision. Work using the Jira flow described in the Onboarding Ticket.
 - If mentor leaves some fix notes in PR's comments, you should fix them and commit to the same branch.
 - When PR is approved, you should merge it to dev branch. Before merging, all commits must be squashed.
+- All PRs for fronted must contain a proof of working part. Video can be accepted as a proof of work.
 
 2) User service:
 - PostgreSQL as DB.
@@ -122,6 +123,7 @@ Nonfunctional requirements:
 - The database stores: information about the Driver (name, phone number, email, password, taxi type), information about the last 20 orders, driver's rating as an array, driver's balance (earnings). When the length of the array with orders becomes >20, it is necessary to delete the irrelevant ones.
 - Aggregation of the driver rating based on the last 20 ratings.
 - Pprof handlers must be added (and used). Or another type of profiling if GO is not used.
+- Within profiling use PGO to optimize your service. First try it with Pprof, then with some other profiler (your choice).
 - Front-end: Use Angular (latest version), create registration forms, authorization, and profile views, change fields in profile, and delete profile.
 - VCS: Gitlab; CI/CD: Gitlab CI/CD;
 
@@ -150,6 +152,7 @@ Technical requirements:
 - All services must be covered by integration tests and Unit tests.
 - A CI/CD must be set up for each service with the following steps: 1) tests, 2) linter, 3) linter for protofiles, 4) vulncheck, 5) Build the image and upload it to your Docker Hub (in the master branch).
 - Authentication using JWT.
+- For each service there should be created Postman collections and Postman tests.
 
   Go:
 - UserService: Gin as an HTTP-library. Analyst: Fiber.
