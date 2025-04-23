@@ -1,165 +1,216 @@
-# InnoTaxi
+# InnoTaxi - Taxi Ordering Application
 
-All repositories, that are going to be created during the internship project must be private.
-They become a part of the NDA, signed by you (**Forbidden to make those repos public, ever)!**
+## Overview
 
-InnoTaxi - app for ordering a taxi.
+InnoTaxi is a taxi ordering application designed to facilitate taxi bookings with three distinct user roles: **User**, **Driver**, and **Analyst**. It supports two wallet types—**Personal** and **Family**—and offers three taxi types: **Economy**, **Comfort**, and **Business**. Built on a microservice architecture with clean architecture principles, the application ensures modularity, scalability, and maintainability.
 
-In app realization, there must be:
+**Important**: All repositories created for this project must remain **private** and are subject to a Non-Disclosure Agreement (NDA). They must **never** be made public.
 
-3 user roles:
-1) User;
-2) Driver;
-3) Analyst.
+## Microservices
 
-2 wallet types:
-1) Pesonal;
-2) Family;
+The application consists of six microservices, each handling specific functionalities:
 
-3 taxi types:
-1) Economy;
-2) Comfort;
-3) Business.
+1. **User Service**: Manages user profiles, taxi orders, and wallet interactions for users.
+2. **Driver Service**: Handles driver profiles, trip statuses, and wallet operations for drivers.
+3. **Order Service**: Orchestrates taxi order creation, driver assignment, and transaction processing.
+4. **Analytic Service**: Provides statistical insights and ratings for analysts.
+5. **Wallet Service**: Manages wallets and transactions for users and drivers.
+6. **Auth Service**: Centralizes authentication and authorization for all roles.
 
-The app must be based on microservice architecture with clean architecture principles.
+## Functional Requirements
 
-4 microservices must be created:
+### Auth Service
 
-1) User Service;
-2) Driver Service;
-3) Order Service;
-4) Analytic Service.
+- **Authentication**: Processes login and logout requests for users, drivers, and analysts.
+- **Token Management**: Issues JSON Web Tokens (JWT) upon successful login and invalidates them upon logout by adding to a Redis blacklist.
+- **Credential Verification**: Communicates with User, Driver, and Analytic Services to verify login credentials.
+- **Token Validation**: Validates JWT tokens for incoming requests, providing role information (User, Driver, Analyst) to enforce access control. Ensures users cannot access driver or analyst functionalities, and vice versa, resulting in a "Permission Denied" error for unauthorized actions.
 
-Detailed description of the services provided below.
+### User Service
 
-Functional requirements:
+- **Registration**: Users sign up directly with name, phone number, email, and password. A personal wallet is created via the Wallet Service.
+- **Profile Management**: Users can view, update (name, phone number, email), or soft-delete their profiles.
+- **Wallet Operations**:
+  - View available wallets (personal and family) through the Wallet Service.
+  - Create family wallets and add members by phone number.
+  - Cash in personal or family wallets (only the owner for family wallets).
+  - View transaction history (restricted to owners for family wallets).
+- **Order Taxi**:
+  - Users specify taxi type, start and end locations, and select a wallet.
+  - The system verifies wallet balance via the Wallet Service.
+  - If sufficient, it requests a free driver through the Order Service. If no drivers are available, users join a queue with a configurable wait time. If no driver is found, a rejection response is sent.
+- **Rate Trip**: Users can rate their last trip (1–5) with an optional comment, if within a configurable time since trip completion.
+- **View Trips**: Users can view past trips, including taxi type, driver, and route details.
+- **Restriction**: Orders are blocked if the selected wallet has insufficient funds.
+- **Authentication**: All operations require a valid JWT token, validated through the Auth Service to confirm the User role.
 
-User Service:
-1) User can sign up. 
-    * Fields for signing up: name, phone number, email, password.
-2) User can sign in.
-    * Fields for signing in: phone number, password.
-3) User can log out of the app (token, that was given to user must become unacceptable by the system, even if it is still valid).
-4) User can order a taxi.
-    * Fields for ordering a taxi: taxi type, from, to.
-    * While ordering a taxi, the system is seeking a free driver (status = free). When a driver is found, an order will be created with an in progress status. Driver becomes busy (status = busy).
-    * If there are no available drivers, the user must wait for a free driver for some configurable amount of time. If after this time no driver is found, the user should receive a rejection response.
-    * If no drivers are available, a queue of waiting users forms. The first user to order a taxi should be the first to receive a driver or a message that no driver has been found.
-5) User can rate the trip. Only the last trip can be rated. Only the most recent trip can be rated if less than a certain (configurable) amount of time has elapsed since the trip. Rating from 1 to 5 inclusive.
-   User can leave an optional comment for the trip.
-6) User can view their trips (taxi type, driver, from, to).
-7) User can view their profile (name, phone number, email, rating).
-8) User can update their profile (name, phone number, email).
-9) User can delete their profile (using soft delete).
-10) User must have a wallet, also must be added the feature of creating a "family" wallet (wallet for many users), family wallet must be attached to the user's personal wallet, and the user can add new members to the family wallet by phone number.
-11) If there are many wallets available for the User, User can choose which balance will be drained.
-12) User can cash in their wallet. Family wallet can be cashed in only by its owner.
-13) User can view their wallet's transactions. For family wallets, only the owner can see transactions.
-14) User can't order a taxi if there isn't enough money in the chosen wallet.
+### Driver Service
 
-Driver Service:
-1) Driver can sign up.
-    * Fields for signing up: name, phone number, email, password, taxi type.
-2) Driver can sign in.
-    * Fields for signing in: phone number, password.
-3) Driver can change their status when the trip is over. At the same time, the order's status changes to finished.
-4) Driver can rate the trip. Only the last trip can be rated. Only the most recent trip can be rated if less than a certain (configurable) amount of time has elapsed since the trip. Rating from 1 to 5 inclusive.
-5) Driver can view their rating. Rating is calculated based on 20 previous trips.
-6) Driver can view their trips (taxi type, user, from to).
-7) Driver can have 2 statuses: busy, free.
+- **Registration**: Drivers sign up directly with name, phone number, email, password, and taxi type. A single driver wallet is created via the Wallet Service.
+- **Status Management**: Drivers can toggle their status (free/busy) after a trip, updating the order status via the Order Service.
+- **Rate Trip**: Drivers can rate their last trip (1–5), if within a configurable time since trip completion.
+- **View Rating**: Drivers can view their rating, calculated from the last 20 trips.
+- **View Trips**: Drivers can view past trips, including taxi type, user, and route details.
+- **Wallet Operations**: Drivers can view their single wallet’s balance and transaction history via the Wallet Service.
+- **Authentication**: All operations require a valid JWT token, validated through the Auth Service to confirm the Driver role.
 
-Order Service:
-1) Order Service acts as an orchestration  service for both User and Driver services. It is used for order processing. 
-2) Order list is available for fetching with optional custom filters (any field).
-3) Order fields: user, driver, from, to, taxi type, date, status, comment.
-4) Orders' statuses could be in progress or finished.
-5) Analyst has the ability to search through the list of orders.
-6) Order Service stores prices for each of the taxi types.
+### Order Service
 
+- **Order Orchestration**: Manages taxi order creation, driver assignment, and status updates. Interacts with the Wallet Service to block funds during order creation and complete transactions upon trip completion.
+- **Order List**: Provides a filtered and paginated list of orders for authorized roles.
+- **Order Fields**: Includes user, driver, start and end locations, taxi type, date, status (in progress, finished), and comment.
+- **Pricing**: Maintains pricing information for each taxi type.
+- **Search**: Analysts can search orders with partial field matching.
+- **Driver Selection**: Supports selecting drivers based on user ratings.
+- **Authentication**: Requests are validated through the Auth Service to ensure role-based access (e.g., users for ordering, drivers for status updates, analysts for searches).
 
-Analytic Service:
-1) Analyst can view the statistics of the orders (number by day, month).
-2) Analyst can view the rating of all drivers.
-3) Analyst can view the ratings of all users.
-4) Analyst has a pre-created account in the system, login by username, password.
-5) All registrations and completed orders should be recorded in Analytic database.
+### Analytic Service
 
+- **Statistics**: Analysts can view order statistics, such as counts by day or month.
+- **Ratings**: Analysts can view ratings for all drivers and users.
+- **Account**: Analysts use pre-created accounts, logging in via the Auth Service.
+- **Data Recording**: Records all registrations and completed orders in its database.
+- **Authentication**: Access requires a valid JWT token, validated through the Auth Service to confirm the Analyst role.
 
-Applications schema:
+### Wallet Service
 
-<img src="Design-diagram-v3.png" width="600" height="500" /> 
+- **Wallet Creation**:
+  - Creates personal wallets for users during registration.
+  - Creates a single driver wallet for drivers during registration.
+  - Creates family wallets upon user request.
+- **Wallet Management**:
+  - Adds members to family wallets by phone number.
+  - Processes cash-in operations for personal or family wallets (only owners for family wallets).
+- **Transaction Management**:
+  - Manages order transactions with statuses: create, blocked, success, canceled.
+  - Verifies sufficient wallet balance during order creation, setting transactions to **blocked** or **canceled**.
+  - Completes transactions upon order completion, deducting from the user’s wallet and crediting the driver’s wallet.
+- **Transaction History**: Provides transaction history, with access restricted to owners for family wallets.
+- **Authentication**: Internal calls from other services include user or driver information after token validation by the calling service.
 
-Adding new services is allowed, it is not allowed to reduce the number of services. When you change the scheme (add new services), the application must be supplemented with a diagram and put in the repository in .png and .drawio formats. For each service you should create separate repository.
+## Nonfunctional Requirements
 
-Nonfunctional requirements:
+### General
 
-1) General:
-- GitHub Flow.
-- 2 main branches (main, dev).
-- Main acts as a release branch. Only stable versions (with implemented functionality) should be uploaded here.
-- When adding a new feature, refactoring, or fixing bugs, it is necessary to branch from the Dev branch and create a new one. Branch naming must include the Jira task ID.
-- Do the work in the created branches and create a Pull Request in the Dev branch. The pull request's name must contain the Jira task ID .
-- When the pull request is done, write to the mentor and start a new task without waiting for a revision. Work using the Jira flow described in the Onboarding Ticket.
-- If mentor leaves some fix notes in PR's comments, you should fix them and commit to the same branch.
-- When PR is approved, you should merge it to dev branch. Before merging, all commits must be squashed.
-- All PRs for fronted must contain a proof of working part. Video can be accepted as a proof of work.
+- **GitHub Flow**: Maintain two main branches: **main** (stable releases) and **dev** (development). Create feature branches from **dev**, named with the Jira task ID.
+- **Pull Requests**: Submit PRs to **dev** with the Jira task ID in the name. Include proof of work (e.g., video) for frontend PRs. Squash commits before merging.
+- **CI/CD**: Configure for each service with steps: tests, linter, protofile linter, vulnerability check, and image build/upload to Docker Hub (master branch).
+- **Deployment**: Deploy in two environments: Docker via docker-compose and Kubernetes via Helm.
+- **Configuration**: Use environment variables for configurable settings, such as database connections and wait times.
+- **Documentation**: Each service must include a README (startup instructions, environment variables) and Swagger (endpoint details).
+- **Testing**: Implement unit and integration tests, along with Postman collections and tests.
+- **Authentication**: Use JWT managed by the Auth Service. Tokens are stored in Redis, and all services validate tokens by calling the Auth Service, ensuring role-based access control.
 
-2) User service:
-- PostgreSQL as DB.
-- Tables: Users, Trips, Wallets, Transactions.
-- Wallets table has MnM relation with Users table. There is as type column in Wallets table, it must be Enum. 2 types are allowed: Family, Personal.
-- Inside PostgreSQL user's last 20 orders must be stored. In case of overflow of this amount trigger must be executed to clean old extra orders. 
-- Based on the 20 ratings from the last orders, the user's average rating is formed.
-- A table with all transactions to write off the balance. Transaction statuses: create, blocked, success and canceled. When the user creates an order, it is given **create** status, if the user's balance >= the cost of the trip, the status changes to **blocked**, otherwise to **canceled**. When the trip is completed, the status is switched to **success**.
-- Redis as a cache. Implement user token storage and logout (token deletion).
-- Prometheus and Grafana for collecting metrics.
-- Swagger is generated from the application code.
-- Front-end: Use Vue.js (3.0) composition API. Create a registration form, an authorization form, view your profile, change fields in your profile, delete your profile. Use components, Pinia.
-- VCS: GitHub; CI/CD: Github Actions.
+### Service-Specific
 
-3) Driver service:
-- Handler layer must be generated from a Swagger file. (No handmade HTTP interaction).
-- MongoDB as DB.
-- The database stores: information about the Driver (name, phone number, email, password, taxi type), information about the last 20 orders, driver's rating as an array, driver's balance (earnings). When the length of the array with orders becomes >20, it is necessary to delete the irrelevant ones.
-- Aggregation of the driver rating based on the last 20 ratings.
-- Pprof handlers must be added (and used). Or another type of profiling if GO is not used.
-- Within profiling use PGO to optimize your service. First try it with Pprof, then with some other profiler (your choice).
-- Front-end: Use Angular (latest version), create registration forms, authorization, and profile views, change fields in profile, and delete profile.
-- VCS: Gitlab; CI/CD: Gitlab CI/CD;
+#### User Service
 
-4) Order service:
-- GraphQL as a transport layer.
-- Endpoint to search by fields: DriverID, UserID, from, to, fromDate, toDate. Implement partial search (when some fields are not specified, they should be ignored).
-- Add pagination for the given endpoint. Fields offset; limit.
-- Elasticsearch for order service (ability to search **from** or **to** created trips). Search by prefix, full text search by trip comments, and add the possibility of searching with transliteration and lexical errors.
-- Additional task: to implement the possibility of selecting drivers based on user rating.
-- Front-end: Use React + redux/redux toolkit. Create a main page (front to GQL endpoints) with filters (from - to; fromDate - toDate; User name; Driver name; taxi type etc.).
-- VCS: BitBucket; CI/CD: Bitbucket pipelines.
+- **Database**: PostgreSQL for storing user and trip data.
+- **Caching**: No token storage; tokens are managed by the Auth Service.
+- **Metrics**: Use Prometheus and Grafana for monitoring.
+- **Frontend**: Develop with Vue.js 3.0 using Composition API, incorporating components and Pinia for state management.
+- **VCS**: GitHub; **CI/CD**: GitHub Actions.
+- **Go Tools**: Use Gin for HTTP, golangci-lint for linting, and sqlc, sqlx, or squirrel for PostgreSQL queries (no ORMs). Use Goose or go-migrate for migrations.
+- **Driver Queue**: Implement using goroutines, channels, and sync packages.
+- **Testing**: Employ table tests, gomock, testify/suite, ginkgo, gomega, and dockertest for integration tests.
 
-5) Analyst service:
-- ClickHouse as DB.
-- Consume messages from Kafka into ClickHouse.
-- VCS: Github; CI/CD: Circle CI.
+#### Driver Service
 
-Technical requirements:
-- Kafka as a message broker.
-- For RPC interactions, use GRPC.
-- A Dockerfile must be described for each service.
-- Each service must contain a Makefile to test, build, and deploy the service.
-- The entire infrastructure must be deployed in two environments: Docker via docker-compose and Kubernetes via Helm.
-- All variables to be changed (database connection, user's waiting time) must be set via environment variables.
-- Each service must have a README (describing what is needed to start it and environment variables) and a swagger (detailing all the endpoints).
-- All services must be covered by integration tests and Unit tests.
-- A CI/CD must be set up for each service with the following steps: 1) tests, 2) linter, 3) linter for protofiles, 4) vulncheck, 5) Build the image and upload it to your Docker Hub (in the master branch).
-- Authentication using JWT.
-- For each service there should be created Postman collections and Postman tests.
+- **Database**: MongoDB for storing driver information, trips, ratings, and balance.
+- **Handlers**: Generate handlers from Swagger files to avoid manual HTTP interactions.
+- **Profiling**: Implement Pprof and Profile-Guided Optimization (PGO), plus an additional profiler of choice.
+- **Frontend**: Use Angular (latest version) for registration, authorization, and profile management.
+- **VCS**: GitLab; **CI/CD**: GitLab CI/CD.
+- **Rating**: Calculate driver ratings based on the last 20 trips.
 
-  Go:
-- UserService: Gin as an HTTP-library. Analyst: Fiber.
-- Usage of golangci-lint
-- To work with Postgres it is allowed to use pure SQL, or sqlc, sqlx, or squirrel. Using ORM is not allowed.
-- To implement the user's waiting for free drivers, use goroutines and channels, and if necessary, sync and x/sync packages.
-- For migrations use Goose or go-migrate.
-- Style guidlines [here](https://rakyll.org/style-packages/)
-- To use table tests, gomock, testify/suite, ginkgo, gomega.
-- For integration tests, use dockertest.
+#### Order Service
+
+- **Transport**: Use GraphQL for API interactions, supporting field-based searches and pagination.
+- **Search**: Implement Elasticsearch for prefix, full-text, transliteration, and lexical error searches.
+- **Frontend**: Develop with React and Redux/Redux Toolkit for a filterable main page.
+- **VCS**: BitBucket; **CI/CD**: Bitbucket Pipelines.
+
+#### Analytic Service
+
+- **Database**: ClickHouse for storing and querying analytical data.
+- **Message Consumption**: Consume messages from Kafka into ClickHouse.
+- **VCS**: GitHub; **CI/CD**: Circle CI.
+- **HTTP Library**: Use Fiber for HTTP handling.
+
+#### Wallet Service
+
+- **Database**: PostgreSQL for managing wallets and transactions.
+- **HTTP Library**: Use Gin (assumed for consistency).
+- **VCS**: GitHub (assumed); **CI/CD**: GitHub Actions (assumed).
+
+#### Auth Service
+
+- **Database**: Redis for storing and blacklisting JWT tokens.
+- **HTTP Library**: Use Gin (assumed for consistency).
+- **VCS**: GitHub (assumed); **CI/CD**: GitHub Actions (assumed).
+
+## Technical Requirements
+
+- **Message Broker**: Use Kafka for event-driven communication between services.
+- **RPC**: Implement gRPC for efficient inter-service communication.
+- **Containerization**: Provide a Dockerfile and Makefile for each service to handle testing, building, and deployment.
+- **Go Guidelines**: Adhere to style guidelines outlined in Rakyll's Style Guide.
+- **Diagram Update**: When adding new services, update the application schema diagram and include it in the repository in .png and .drawio formats.
+
+**Note**: Database schemas and API request/response structures must be designed independently based on each service’s requirements. These are not detailed in this README and should be documented in each service’s Swagger files.
+
+## Authentication Flow
+
+- **Registration**:
+  - Users and drivers register directly with the User or Driver Service, respectively, providing necessary details and creating wallets via the Wallet Service.
+- **Login**:
+  - Clients send login requests to the Auth Service, specifying credentials and role (User, Driver, Analyst).
+  - The Auth Service verifies credentials by calling the corresponding service (User, Driver, or Analytic).
+  - Upon successful verification, the Auth Service issues a JWT token containing the user’s role and stores it in Redis.
+- **Subsequent Requests**:
+  - Clients include the JWT token in request headers when accessing any service.
+  - The receiving service calls the Auth Service to validate the token, checking its signature, expiration, and blacklist status in Redis, and retrieves the user’s role.
+  - The service enforces role-based access control, rejecting requests with a “Permission Denied” error if the role does not match the required permissions (e.g., a User attempting Driver actions).
+- **Logout**:
+  - Clients send logout requests to the Auth Service, which blacklists the token in Redis, rendering it invalid for future requests.
+
+## Inter-Service Interactions
+
+- **User and Driver Services**:
+  - Handle profile and wallet-related operations by calling the Wallet Service with validated user or driver information.
+  - Initiate taxi orders by interacting with the Order Service after token validation.
+- **Order Service**:
+  - Coordinates with the Wallet Service to manage transaction lifecycles (blocking and completing funds).
+  - Assigns drivers and updates order statuses, ensuring role-based access via Auth Service validation.
+- **Wallet Service**:
+  - Processes internal requests from other services, relying on the calling service to validate tokens and provide user or driver IDs.
+- **Analytic Service**:
+  - Provides data access to analysts, with all requests validated through the Auth Service to confirm the Analyst role.
+- **Auth Service**:
+  - Serves as the central authority for authentication and authorization, ensuring secure and role-appropriate access across the system.
+
+## Development Guidelines
+
+- **Repository Structure**: Each service must have its own private repository on the specified VCS platform (GitHub, GitLab, or BitBucket).
+- **Branching Strategy**: Follow GitHub Flow with **main** and **dev** branches. Feature branches should include the Jira task ID.
+- **Pull Request Process**:
+  - Create PRs from feature branches to **dev**.
+  - Include the Jira task ID in the PR title.
+  - Provide proof of work for frontend changes (e.g., a video).
+  - Address mentor feedback in the same branch and squash commits before merging.
+- **CI/CD Pipelines**:
+  - Run tests, linters, protofile checks, and vulnerability scans.
+  - Build and push Docker images to Docker Hub for the master branch.
+- **Testing**:
+  - Write unit and integration tests to ensure robust functionality.
+  - Create Postman collections and tests for API validation.
+- **Documentation**:
+  - Maintain a detailed README per service, covering setup and environment variables.
+  - Generate Swagger documentation from code to describe API endpoints.
+- **Deployment**:
+  - Support deployment in Docker (via docker-compose) and Kubernetes (via Helm).
+  - Configure all variable settings through environment variables.
+
+## Key Citations
+
+- Rakyll's Go Style Guidelines for Package Design
