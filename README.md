@@ -25,12 +25,12 @@ The application consists of six microservices, each handling specific functional
 
 - **Role Management**: Issues JWT tokens containing a list of user roles (e.g., ["User", "Analyst", "Driver"]). Users can have multiple roles, enabling flexible permission management.
 - **Authentication**: Processes login and logout requests for users and drivers. Verifies credentials by interacting with User or Driver Services.
-- **Token Management**: Stores blacklisted tokens in Redis for logout functionality. Validates tokens by checking signature, expiration, and blacklist status.
+- **Token Management**: Stores blacklisted tokens. Validates tokens by checking signature, expiration, and blacklist status.
 - **Access Control**: Provides role information upon token validation. Services enforce role-based access control, ensuring users cannot access driver or analyst functionalities without appropriate roles (e.g., "Permission Denied" for unauthorized actions).
 
 ### User Service
 
-- **Registration**: Users sign up with name, phone number, email, and password. A personal wallet is created via the Wallet Service. Users can be assigned roles such as "User" and optionally "Analyst" during registration or through administrative actions.
+- **Registration**: Users sign up with name, phone number, email, and password. Users can be assigned roles such as "User" and optionally "Analyst" (manually via db)
 - **Profile Management**: Users can view, update (name, phone number, email), or soft-delete their profiles.
 - **Wallet Operations**:
   - View available wallets (personal and family) through the Wallet Service.
@@ -48,7 +48,7 @@ The application consists of six microservices, each handling specific functional
 
 ### Driver Service
 
-- **Registration**: Drivers sign up with name, phone number, email, password, and taxi type. A single driver wallet is created via the Wallet Service. Drivers are assigned the "Driver" role.
+- **Registration**: Drivers sign up with name, phone number, email, password, and taxi type. Drivers are assigned the "Driver" role.
 - **Status Management**: Drivers toggle their status (free/busy) after a trip, updating the order status via the Order Service.
 - **Rate Trip**: Rate the last trip (1–5), if within a configurable time since completion.
 - **View Rating**: View rating calculated from the last 20 trips.
@@ -70,14 +70,14 @@ The application consists of six microservices, each handling specific functional
 
 - **Statistics**: Users with the "Analyst" role can view order statistics (e.g., counts by day or month).
 - **Ratings**: View ratings for all drivers and users.
-- **Account**: Analyst permissions are granted to specific users via the "Analyst" role, managed through the User Service.
+- **Account**: Analyst permissions are granted to specific users via the "Analyst" role, managed through the User Service (set up manually from db).
 - **Data Recording**: Records all registrations and completed orders.
 - **Authentication**: Access requires a valid JWT token with the "Analyst" role, validated through the Auth Service.
 
 ### Wallet Service
 
 - **Wallet Creation**:
-  - Creates personal wallets for users and a single wallet for drivers during registration.
+  - Creates personal wallets for users and a single wallet for drivers upon user\driver request.
   - Creates family wallets upon user request.
 - **Wallet Management**:
   - Adds members to family wallets by phone number.
@@ -93,7 +93,7 @@ The application consists of six microservices, each handling specific functional
 
 ### General
 
-- **GitHub Flow**: Maintain **main** (stable releases) and **dev** (development) branches. Create feature branches from **dev**, named with the Jira task ID.
+- **GitHub Flow**: Maintain **main** (stable releases) and **dev** (development) branches. Create feature branches from **dev**, named with the ClickUp task ID.
 - **Pull Requests**: Submit PRs to **dev** with the Jira task ID in the name. Include proof of work (e.g., video) for frontend PRs. Squash commits before merging.
 - **CI/CD**: Configure for each service with steps: tests, linter, protofile linter, vulnerability check, and image build/upload to Docker Hub (master branch).
 - **Deployment**: Deploy in Docker (docker-compose) and Kubernetes (Helm).
@@ -106,7 +106,6 @@ The application consists of six microservices, each handling specific functional
 
 #### User Service
 - **Database**: PostgreSQL for user and trip data.
-- **Caching**: No token storage; managed by Auth Service.
 - **Metrics**: Prometheus and Grafana.
 - **Frontend**: Vue.js 3.0 with Composition API, using components and Pinia.
 - **VCS**: GitHub; **CI/CD**: GitHub Actions.
@@ -126,22 +125,22 @@ The application consists of six microservices, each handling specific functional
 - **Transport**: GraphQL for field-based searches and pagination.
 - **Search**: Elasticsearch for prefix, full-text, transliteration, and lexical error searches.
 - **Frontend**: React with Redux/Redux Toolkit for filterable main page.
-- **VCS**: BitBucket; **CI/CD**: Bitbucket Pipelines.
+- **VCS**: GitHub; **CI/CD**: GitHub Actions.
 
 #### Analytic Service
 - **Database**: ClickHouse, consuming Kafka messages.
-- **VCS**: GitHub; **CI/CD**: Circle CI.
+- **VCS**: GitHub; **CI/CD**: GitHub Actions.
 - **HTTP Library**: Fiber.
 
 #### Wallet Service
 - **Database**: PostgreSQL for wallets and transactions.
-- **HTTP Library**: Gin (assumed).
-- **VCS**: GitHub (assumed); **CI/CD**: GitHub Actions (assumed).
+- **HTTP Library**: Gin.
+- **VCS**: GitHub; **CI/CD**: GitHub Actions.
 
 #### Auth Service
 - **Database**: Redis for token storage and blacklisting.
-- **HTTP Library**: Gin (assumed).
-- **VCS**: GitHub (assumed); **CI/CD**: GitHub Actions (assumed).
+- **HTTP Library**: Gin.
+- **VCS**: GitHub; **CI/CD**: GitHub Actions.
 
 ## Technical Requirements
 
@@ -156,10 +155,10 @@ The application consists of six microservices, each handling specific functional
 ## Authentication Flow
 
 - **Registration**:
-  - Users and drivers register via User or Driver Service, creating wallets via the Wallet Service. Users may be assigned "User" and optionally "Analyst" roles.
+  - Users and drivers register via User or Driver Service. Users may be assigned "User" and optionally "Analyst" roles (manually in db).
 - **Login**:
   - Clients send login requests to the Auth Service with credentials.
-  - Auth Service verifies credentials with User or Driver Service, retrieves roles, and issues a JWT token containing user ID and roles (e.g., ["User", "Analyst"]).
+  - Auth Service verifies credentials with User or Driver Service, retrieves roles, and issues a JWT token containing user ID and roles (e.g., ["User", "Analyst", "Driver"]).
 - **Subsequent Requests**:
   - Clients include JWT token in headers.
   - Services validate tokens via Auth Service, which checks signature, expiration, and blacklist, returning roles.
@@ -187,7 +186,7 @@ The application consists of six microservices, each handling specific functional
 - **Repository Structure**: Each service has a private repository on the specified VCS platform.
 - **Branching Strategy**: GitHub Flow with **main** and **dev** branches. Feature branches include Jira task ID.
 - **Pull Request Process**:
-  - Create PRs to **dev** with Jira task ID.
+  - Create PRs to **dev** with ClickUp task ID.
   - Include proof of work for frontend changes.
   - Address mentor feedback and squash commits before merging.
 - **CI/CD Pipelines**:
