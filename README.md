@@ -23,7 +23,7 @@ The application consists of six microservices, each handling specific functional
 
 ### Auth Service
 
-- **Role Management**: Issues JWT tokens containing a list of user roles (e.g., ["User", "Analyst"]). Users can have multiple roles, enabling flexible permission management.
+- **Role Management**: Issues JWT tokens containing a list of user roles (e.g., ["User", "Analyst", "Driver"]). Users can have multiple roles, enabling flexible permission management.
 - **Authentication**: Processes login and logout requests for users and drivers. Verifies credentials by interacting with User or Driver Services.
 - **Token Management**: Stores blacklisted tokens in Redis for logout functionality. Validates tokens by checking signature, expiration, and blacklist status.
 - **Access Control**: Provides role information upon token validation. Services enforce role-based access control, ensuring users cannot access driver or analyst functionalities without appropriate roles (e.g., "Permission Denied" for unauthorized actions).
