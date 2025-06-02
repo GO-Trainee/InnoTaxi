@@ -12,192 +12,273 @@ The application consists of six microservices, each handling specific functional
 
 | Service          | Description                                                                 |
 |------------------|-----------------------------------------------------------------------------|
-| **User Service** | Manages user profiles, taxi orders, and wallet interactions for users.       |
-| **Driver Service** | Handles driver profiles, trip statuses, and wallet operations for drivers. |
-| **Order Service** | Orchestrates taxi order creation, driver assignment, and transaction processing. |
-| **Analytic Service** | Provides statistical insights and ratings for users with Analyst permissions. |
-| **Wallet Service** | Manages wallets and transactions for users and drivers.                     |
-| **Auth Service** | Centralizes authentication and authorization for all roles.                 |
+| **User Service** | Manages user profiles, authentication data, and user-related operations.    |
+| **Driver Service** | Handles driver profiles, authentication data, and driver status management. |
+| **Order Service** | Orchestrates taxi order creation, driver assignment, trip management, and pricing. |
+| **Analytic Service** | Provides statistical insights and analytics for users with Analyst permissions. |
+| **Wallet Service** | Manages wallets, transactions, and payment processing for users and drivers. |
+| **Auth Service** | Centralizes authentication, authorization, and session management for all roles. |
 
 ## Functional Requirements
 
 ### Auth Service
 
-- **Role Management**: Issues JWT tokens containing a list of user roles (e.g., ["User", "Analyst", "Driver"]). Users can have only one role.
-- **Authentication**: Processes login and logout requests for users and drivers. Verifies credentials by interacting with User or Driver Services.
-- **Token Management**: Stores blacklisted tokens. Validates tokens by checking signature, expiration, and blacklist status.
-- **Access Control**: Provides role information upon token validation. Services enforce role-based access control, ensuring users cannot access driver or analyst functionalities without appropriate roles (e.g., "Permission Denied" for unauthorized actions).
+- **Authentication**: Processes login requests by delegating credential verification to User/Driver Services. Issues JWT tokens upon successful authentication.
+- **Role Management**: Issues JWT tokens containing user ID and roles (e.g., ["User", "Analyst", "Driver"]). Users can have multiple roles.
+- **Token Management**: Stores active sessions and blacklisted tokens in Redis. Validates tokens by checking signature, expiration, and blacklist status.
+- **Session Management**: Provides token refresh mechanism and logout functionality.
+- **Access Control**: Services validate tokens through Auth Service to enforce role-based access control.
 
 ### User Service
 
-- **Registration**: Users sign up with name, phone number, email, and password. Users can be assigned roles such as "User" and optionally "Analyst" (manually via db)
-- **Profile Management**: Users can view, update (name, phone number, email), or soft-delete their profiles.
-- **Wallet Operations**:
-  - View available wallets (personal and family) through the Wallet Service.
-  - Create family wallets and add members by phone number.
-  - Cash in personal or family wallets (only the owner for family wallets).
-  - View transaction history (restricted to owners for family wallets).
-- **Order Taxi**:
-  - Specify taxi type, start and end locations, and select a wallet.
-  - Verifies wallet balance via the Wallet Service.
-  - Requests a free driver through the Order Service. If no drivers are available, users join a queue with a configurable wait time. If no driver is found, a rejection response is sent.
-- **Rate Trip**: Rate the last trip (1–5) with an optional comment, if within a configurable time since completion.
-- **View Trips**: View past trips, including taxi type, driver, and route details.
-- **Restriction**: Orders are blocked if the selected wallet has insufficient funds.
-- **Authentication**: All operations require a valid JWT token, validated through the Auth Service to confirm the "User" role. Users with the "Analyst" role can access additional analytics features.
+- **Registration**: Users sign up with name, phone number, email, and password. Password is hashed before storage. Default role "User" is assigned.
+- **Authentication Support**: Provides credential verification endpoint for Auth Service during login.
+- **Profile Management**: Users can view, update (name, phone number, email), change password, or soft-delete their profiles.
+- **Role Management**: Admin functionality to assign "Analyst" role to users (manual process via admin interface).
+- **Order Management**: 
+  - Initiate taxi orders through Order Service
+  - View order history and status
+  - Rate completed trips
+- **Wallet Integration**: Interface with Wallet Service for balance checks and payment operations.
+- **Authentication**: All operations require valid JWT token validated through Auth Service.
 
 ### Driver Service
 
-- **Registration**: Drivers sign up with name, phone number, email, password, and taxi type. Drivers are assigned the "Driver" role.
-- **Status Management**: Drivers toggle their status (free/busy) after a trip, updating the order status via the Order Service.
-- **Rate Trip**: Rate the last trip (1–5), if within a configurable time since completion.
-- **View Rating**: View rating calculated from the last 20 trips.
-- **View Trips**: View past trips, including taxi type, user, and route details.
-- **Wallet Operations**: View single wallet balance and transaction history via the Wallet Service.
-- **Authentication**: All operations require a valid JWT token, validated through the Auth Service to confirm the "Driver" role.
+- **Registration**: Drivers sign up with name, phone number, email, password, and taxi type. Password is hashed before storage. Role "Driver" is assigned.
+- **Authentication Support**: Provides credential verification endpoint for Auth Service during login.
+- **Profile Management**: Drivers can view, update profile information, and change password.
+- **Status Management**: Drivers can toggle their availability status (free/busy/offline).
+- **Trip Management**: 
+  - Accept/decline trip requests from Order Service
+  - Update trip status (started, completed)
+  - Rate completed trips
+- **Rating System**: View calculated rating based on last 20 trips.
+- **Wallet Integration**: Interface with Wallet Service for balance and earnings.
+- **Authentication**: All operations require valid JWT token validated through Auth Service.
 
 ### Order Service
 
-- **Order Orchestration**: Manages taxi order creation, driver assignment, and status updates. Interacts with the Wallet Service to block and complete funds.
-- **Order List**: Provides a filtered and paginated list of orders for authorized roles.
-- **Order Fields**: Includes user, driver, start and end locations, taxi type, date, status (in progress, finished), and comment.
-- **Pricing**: Maintains pricing for each taxi type.
-- **Search**: Users with the "Analyst" role can search orders with partial field matching.
-- **Driver Selection**: Supports selecting drivers based on user ratings.
-- **Authentication**: Requests are validated through the Auth Service to ensure role-based access (e.g., "User" for ordering, "Driver" for status updates, "Analyst" for searches).
+- **Order Management**: 
+  - Creates and manages taxi orders
+  - Handles order lifecycle: created → driver_assigned → in_progress → completed/cancelled
+  - Stores complete trip history with ratings and comments
+- **Driver Assignment**: 
+  - Implements driver matching algorithm based on location, taxi type, and rating
+  - Manages driver queue and availability
+  - Handles driver acceptance/rejection logic
+- **Pricing Engine**: 
+  - Calculates trip cost based on distance, time, taxi type, and surge pricing
+  - Manages pricing configuration
+- **Trip History**: Stores all trip data including routes, timestamps, costs, and ratings.
+- **Search & Analytics**: Provides search functionality for users with "Analyst" role.
+- **Payment Integration**: Coordinates with Wallet Service for payment processing.
+- **Authentication**: Role-based access control for different operations.
 
 ### Analytic Service
 
-- **Statistics**: Users with the "Analyst" role can view order statistics (e.g., counts by day or month).
-- **Ratings**: View ratings for all drivers and users.
-- **Account**: Analyst permissions are granted to specific users via the "Analyst" role, managed through the User Service (set up manually from db).
-- **Data Recording**: Records all registrations and completed orders.
-- **Authentication**: Access requires a valid JWT token with the "Analyst" role, validated through the Auth Service.
+- **Data Collection**: Receives events from other services via Kafka (user registrations, completed orders, ratings).
+- **Statistics**: Provides order statistics, user behavior analytics, and business metrics.
+- **Ratings Analytics**: Aggregated ratings for drivers and overall service quality.
+- **Reports**: Generates business reports for stakeholders.
+- **Real-time Dashboards**: Provides real-time metrics for operations monitoring.
+- **Authentication**: Access restricted to users with "Analyst" role.
 
 ### Wallet Service
 
-- **Wallet Creation**:
-  - Creates personal wallets for users and a single wallet for drivers upon user\driver request.
-  - Creates family wallets upon user request.
-- **Wallet Management**:
-  - Adds members to family wallets by phone number.
-  - Processes cash-in operations (only owners for family wallets).
-- **Transaction Management**:
-  - Manages order transactions with statuses: create, blocked, success, canceled.
-  - Verifies wallet balance during order creation, setting transactions to **blocked** or **canceled**.
-  - Completes transactions upon order completion, deducting from user’s wallet and crediting driver’s wallet.
-- **Transaction History**: Provides history, restricted to owners for family wallets.
-- **Authentication**: Internal calls include user or driver information after token validation by the calling service.
+- **Wallet Creation**: 
+  - Automatically creates personal wallets upon user/driver registration
+  - Creates family wallets upon user request
+- **Family Wallet Management**: 
+  - Adds/removes members by phone number
+  - Manages ownership and permissions
+- **Transaction Management**: 
+  - Processes payments with two-phase commit (reserve → confirm/cancel)
+  - Maintains transaction history with detailed status tracking
+  - Handles refunds and cancellations
+- **Balance Management**: 
+  - Real-time balance checking
+  - Cash-in operations with payment gateway integration
+- **Security**: 
+  - Transaction verification and fraud detection
+  - Audit logging for all financial operations
+- **Authentication**: Internal service authentication for secure inter-service communication.
 
 ## Nonfunctional Requirements
 
 ### General
 
-- **GitHub Flow**: Maintain **main** (stable releases) and **dev** (development) branches. Create feature branches from **dev**, named with the ClickUp task ID.
-- **Pull Requests**: Submit PRs to **dev** with the Jira task ID in the name. Include proof of work (e.g., video) for frontend PRs. Squash commits before merging.
-- **CI/CD**: Configure for each service with steps: tests, linter, protofile linter, vulnerability check, and image build/upload to Docker Hub (master branch).
-- **Deployment**: Deploy in Docker (docker-compose) and Kubernetes (Helm).
-- **Configuration**: Use environment variables for settings (e.g., database connections, wait times).
-- **Documentation**: Each service includes a README (startup instructions, environment variables) and Swagger (endpoint details).
-- **Testing**: Implement unit and integration tests, with Postman collections and tests.
-- **Authentication**: JWT managed by the Auth Service. Tokens are stored in Redis, and services validate tokens via the Auth Service, ensuring role-based access.
+- **Version Control**: All services use GitHub with consistent branching strategy.
+- **Branching Strategy**: GitHub Flow with **main** (production) and **develop** (development) branches. Feature branches from **develop**, named `feature/TASK-ID-description`.
+- **Pull Requests**: Submit PRs to **develop** with task ID in the name. Include proof of work for frontend PRs. Code review required before merging.
+- **CI/CD**: GitHub Actions for all services with pipeline stages:
+  - Code quality checks (linting, formatting)
+  - Unit and integration tests
+  - Security vulnerability scanning
+  - Docker image build and push to registry (main branch only)
+- **Deployment**: 
+  - Development: Docker Compose
+  - Production: Kubernetes with Helm charts
+- **Configuration**: Environment-based configuration using .env files and Kubernetes ConfigMaps/Secrets.
+- **Documentation**: Each service includes comprehensive README, API documentation (Swagger/OpenAPI), and architecture diagrams.
+- **Testing**: Unit tests, integration tests, and E2E test suites. Postman collections for API testing.
+- **Monitoring**: Prometheus metrics, structured logging, distributed tracing with Jaeger.
 
-### Service-Specific
+### Service-Specific Technical Stack
 
 #### User Service
-- **Database**: PostgreSQL for user and trip data.
-- **Metrics**: Prometheus and Grafana.
-- **Frontend**: Vue.js 3.0 with Composition API, using components and Pinia.
-- **VCS**: GitHub; **CI/CD**: GitHub Actions.
-- **Go Tools**: Gin for HTTP, golangci-lint, sqlc/sqlx/squirrel for PostgreSQL (no ORMs). Goose or go-migrate for migrations.
-- **Driver Queue**: Use goroutines, channels, and sync packages.
-- **Testing**: Table tests, gomock, testify/suite, ginkgo, gomega, dockertest.
+- **Database**: PostgreSQL for user profiles and authentication data
+- **HTTP Framework**: Gin
+- **Database Layer**: sqlc for type-safe SQL, squirrel for query building
+- **Migrations**: go-migrate
+- **Testing**: testify, gomock, dockertest for integration tests
+- **Frontend**: Vue.js 3 with Composition API and Pinia for state management
 
 #### Driver Service
-- **Database**: MongoDB for driver info, trips, ratings, and balance.
-- **Handlers**: Generate from Swagger.
-- **Profiling**: Pprof, PGO, and an additional profiler.
-- **Frontend**: Angular (latest) for forms and profile management.
-- **VCS**: GitLab; **CI/CD**: GitLab CI/CD.
-- **Rating**: Based on last 20 trips.
+- **Database**: PostgreSQL for driver profiles (consistency with User Service)
+- **HTTP Framework**: Gin
+- **Database Layer**: sqlc and squirrel
+- **Migrations**: go-migrate
+- **Testing**: testify, gomock, dockertest
+- **Frontend**: Vue.js 3 (consistent with User Service)
 
 #### Order Service
-- **Transport**: GraphQL for field-based searches and pagination.
-- **Search**: Elasticsearch for prefix, full-text, transliteration, and lexical error searches.
-- **Frontend**: React with Redux/Redux Toolkit for filterable main page.
-- **VCS**: GitHub; **CI/CD**: GitHub Actions.
+- **Database**: PostgreSQL for transactional data
+- **Search Engine**: Elasticsearch for advanced search capabilities
+- **HTTP Framework**: Gin with GraphQL support for complex queries
+- **Message Queue**: Kafka for event publishing
+- **Testing**: testify, gomock, dockertest
+- **Frontend**: React with Redux Toolkit for order management interface
 
 #### Analytic Service
-- **Database**: ClickHouse, consuming Kafka messages.
-- **VCS**: GitHub; **CI/CD**: GitHub Actions.
-- **HTTP Library**: Fiber.
+- **Database**: ClickHouse for analytical workloads
+- **Message Broker**: Kafka consumer for real-time data ingestion
+- **HTTP Framework**: Fiber for high-performance analytics API
+- **Testing**: testify, integration tests with ClickHouse
+- **Frontend**: React with visualization libraries (Chart.js, D3.js)
 
 #### Wallet Service
-- **Database**: PostgreSQL for wallets and transactions.
-- **HTTP Library**: Gin.
-- **VCS**: GitHub; **CI/CD**: GitHub Actions.
+- **Database**: PostgreSQL for financial data consistency
+- **HTTP Framework**: Gin
+- **Database Layer**: sqlc with transaction support
+- **Security**: Encryption for sensitive financial data
+- **Testing**: testify, financial transaction testing suites
 
 #### Auth Service
-- **Database**: Redis for token storage and blacklisting.
-- **HTTP Library**: Gin.
-- **VCS**: GitHub; **CI/CD**: GitHub Actions.
+- **Database**: Redis for session storage and token blacklisting
+- **HTTP Framework**: Gin
+- **JWT Library**: golang-jwt with secure key management
+- **Testing**: testify, Redis integration tests
 
 ## Technical Requirements
 
-- **Message Broker**: Kafka for event-driven communication.
-- **RPC**: gRPC for inter-service communication.
-- **Containerization**: Dockerfile and Makefile for each service to test, build, and deploy.
-- **Go Guidelines**: Follow [Rakyll's Style Guide](https://rakyll.org/style-packages/).
-- **Diagram Update**: Include updated schema diagram in .png and .drawio formats in the repository.
-
-**Note**: Database schemas and API request/response structures must be designed independently and documented in each service’s Swagger files.
+- **Inter-Service Communication**: gRPC for synchronous calls, Kafka for asynchronous events
+- **API Gateway**: Optional Kong or similar for external API management
+- **Message Broker**: Kafka for event-driven architecture
+- **Containerization**: Docker with multi-stage builds
+- **Orchestration**: Kubernetes with proper resource limits and health checks
+- **Security**: 
+  - TLS for all communications
+  - Secrets management with Kubernetes Secrets
+  - Regular security audits
+- **Code Quality**: 
+  - Go linting with golangci-lint
+  - Code coverage requirements (>80%)
+  - Static analysis tools
+- **Performance**: 
+  - Database query optimization
+  - Caching strategies (Redis)
+  - Connection pooling
 
 ## Authentication Flow
 
-- **Registration**:
-  - Users and drivers register via User or Driver Service. Users may be assigned "User" and optionally "Analyst" roles (manually in db).
-- **Login**:
-  - Clients send login requests to the Auth Service with credentials.
-  - Auth Service verifies credentials with User or Driver Service, retrieves roles, and issues a JWT token containing user ID and roles (e.g., ["User", "Analyst", "Driver"]).
-- **Subsequent Requests**:
-  - Clients include JWT token in headers.
-  - Services validate tokens via Auth Service, which checks signature, expiration, and blacklist, returning roles.
-  - Services enforce role-based access, rejecting requests if required roles (e.g., "User", "Driver", "Analyst") are missing.
-- **Logout**:
-  - Clients send logout requests to Auth Service, which blacklists the token in Redis.
+### Registration
+1. User/Driver sends registration data to respective service
+2. Service validates data and stores hashed password
+3. Service creates default role assignment
+4. Service triggers wallet creation via Wallet Service
+5. Service publishes user_registered event to Analytics
 
-## Inter-Service Interactions
+### Login
+1. Client sends credentials to Auth Service
+2. Auth Service delegates verification to User/Driver Service
+3. User/Driver Service validates credentials (email/phone + password)
+4. On success, Auth Service receives user ID and roles
+5. Auth Service issues JWT token with user ID and roles
+6. Token is cached in Redis with TTL
 
-- **User and Driver Services**:
-  - Manage profiles and wallets via Wallet Service, with validated user/driver information.
-  - Initiate orders via Order Service after token validation.
-- **Order Service**:
-  - Coordinates with Wallet Service for transaction lifecycles.
-  - Assigns drivers and updates statuses, ensuring role-based access.
-- **Wallet Service**:
-  - Processes requests from other services, relying on validated tokens.
-- **Analytic Service**:
-  - Accessible only to users with "Analyst" role, validated via Auth Service.
-- **Auth Service**:
-  - Centralizes authentication and authorization, ensuring secure role-based access.
+### Request Authentication
+1. Client includes JWT token in Authorization header
+2. Target service validates token via Auth Service
+3. Auth Service checks token validity (signature, expiration, blacklist)
+4. Auth Service returns user ID and roles if valid
+5. Target service enforces role-based permissions
 
-## Development Guidelines
+### Logout
+1. Client sends logout request to Auth Service
+2. Auth Service adds token to blacklist in Redis
+3. Token becomes immediately invalid
 
-- **Repository Structure**: Each service has a private repository on the specified VCS platform.
-- **Branching Strategy**: GitHub Flow with **main** and **dev** branches. Feature branches include Jira task ID.
-- **Pull Request Process**:
-  - Create PRs to **dev** with ClickUp task ID.
-  - Include proof of work for frontend changes.
-  - Address mentor feedback and squash commits before merging.
-- **CI/CD Pipelines**:
-  - Tests, linters, protofile checks, vulnerability scans.
-  - Build and push Docker images to Docker Hub (master branch).
-- **Testing**:
-  - Unit and integration tests.
-  - Postman collections and tests for API validation.
-- **Documentation**:
-  - Detailed README per service.
-  - Swagger documentation for API endpoints.
-- **Deployment**:
-  - Docker (docker-compose) and Kubernetes (Helm).
-  - Configure settings via environment variables.
+## Inter-Service Communication Patterns
+
+### Synchronous (gRPC)
+- Auth validation requests
+- Wallet balance checks
+- Driver availability queries
+- Real-time data requirements
+
+### Asynchronous (Kafka Events)
+- User/Driver registration
+- Order status changes
+- Payment completions
+- Analytics data collection
+
+### Database Consistency
+- Each service owns its data
+- No direct database access between services
+- Event-driven eventual consistency
+- Saga pattern for distributed transactions
+
+
+## Error Handling and Resilience
+
+- **Circuit Breaker**: Implement circuit breaker pattern for service-to-service calls
+- **Retry Logic**: Exponential backoff for transient failures
+- **Graceful Degradation**: Service should handle partial functionality when dependencies are unavailable
+- **Health Checks**: Kubernetes liveness and readiness probes
+- **Timeout Management**: Appropriate timeouts for all external calls
+
+## Security Considerations
+
+- **Input Validation**: Strict validation on all input data
+- **SQL Injection Prevention**: Use parameterized queries
+- **XSS Protection**: Proper output encoding
+- **Rate Limiting**: API rate limiting to prevent abuse
+- **Audit Logging**: Log all security-relevant events
+- **Data Encryption**: Encrypt sensitive data at rest and in transit
+
+## Deployment Strategy
+
+### Development Environment
+- Docker Compose with all services
+- Local databases and Redis
+- Mock external services (if needed)
+
+### Staging Environment
+- Kubernetes cluster + helm
+- Shared databases
+- Full integration testing
+
+### Production Environment
+- Kubernetes deployment
+- High-availability databases
+- Load balancing and auto-scaling
+- Monitoring and alerting
+
+## Monitoring and Observability
+
+- **Metrics**: Prometheus with Grafana dashboards
+- **Logging**: Structured logging with centralized collection (ELK/EFK)
+- **Tracing**: Distributed tracing with Jaeger
+- **Alerting**: PagerDuty/Slack integration for critical issues
+- **SLA Monitoring**: Uptime and performance SLAs
+
