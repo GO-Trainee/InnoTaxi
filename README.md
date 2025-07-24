@@ -2,59 +2,86 @@
 
 ## Overview
 
-InnoTaxi is a taxi ordering application designed to facilitate taxi bookings with two primary user roles: **User** and **Driver**. Users can be assigned multiple roles, including **Analyst**, which grants additional permissions to access analytics features. The application supports two wallet types—**Personal** and **Family**—and offers three taxi types: **Economy**, **Comfort**, and **Business**. Built on a microservice architecture with clean architecture principles, it ensures modularity, scalability, and maintainability.
+InnoTaxi is a taxi ordering application designed to facilitate taxi bookings with two primary user roles: **Passenger** and **Driver**. Users can also be assigned **Analyst** role, which grants additional permissions to access analytics features. Each user has only one role. The application supports two wallet types—**Personal** and **Family**—and offers three taxi types: **Economy**, **Comfort**, and **Business**. Built on a microservice architecture with clean architecture principles, it ensures modularity, scalability, and maintainability.
 
 **Important**: All repositories created for this project must remain **private** and are subject to a Non-Disclosure Agreement (NDA). They must **never** be made public.
 
 ## Microservices
 
-The application consists of six microservices, each handling specific functionalities:
+The application consists of seven microservices, each handling specific functionalities:
 
 | Service          | Description                                                                 |
 |------------------|-----------------------------------------------------------------------------|
-| **User Service** | Manages user profiles, authentication data, and user-related operations.    |
-| **Driver Service** | Handles driver profiles, authentication data, and driver status management. |
+| **Gateway Service** | Handles request routing, authentication validation, and role-based access control using nginx. |
+| **User Service** | Manages all user profiles, authentication data, and role assignments for all users. |
+| **Driver Service** | Manages driver-specific information (vehicle, license, status) linked to users via user_id. |
 | **Order Service** | Orchestrates taxi order creation, driver assignment, trip management, and pricing. |
-| **Analytic Service** | Provides statistical insights and analytics for users with Analyst permissions. |
+| **Analytic Service** | Provides statistical insights and analytics for users with Analyst role. |
 | **Wallet Service** | Manages wallets, transactions, and payment processing for users and drivers. |
-| **Auth Service** | Centralizes authentication, authorization, and session management for all roles. |
+| **Auth Service** | Handles JWT token generation and validation. Contains minimal user information (ID and role). |
 
 ## Functional Requirements
 
+### Gateway Service
+
+- **Request Routing**: Routes incoming requests to appropriate microservices based on URL paths using nginx reverse proxy configuration.
+- **Authentication Validation**: Validates JWT tokens by calling Auth Service before forwarding requests to target services.
+- **Role-Based Access Control**: Enforces role-based permissions by checking user roles against endpoint requirements before routing requests.
+- **Load Balancing**: Distributes requests across multiple service instances for high availability.
+- **Rate Limiting**: Implements rate limiting to prevent API abuse and ensure fair usage.
+- **Security Headers**: Adds security headers (CORS, CSP, etc.) to all responses.
+- **Request/Response Logging**: Logs all incoming requests and responses for monitoring and debugging.
+
 ### Auth Service
 
-- **Authentication**: Processes login requests by delegating credential verification to User/Driver Services. Issues JWT tokens upon successful authentication.
-- **Role Management**: Issues JWT tokens containing user ID and roles (e.g., ["User", "Analyst", "Driver"]). Users can have multiple roles.
-- **Token Management**: Stores active sessions and blacklisted tokens in Redis. Validates tokens by checking signature, expiration, and blacklist status.
-- **Session Management**: Provides token refresh mechanism and logout functionality.
-- **Access Control**: Services validate tokens through Auth Service to enforce role-based access control.
+- **Token Generation**: Issues JWT tokens containing user ID and single role upon successful authentication.
+- **Token Validation**: Validates JWT tokens by checking signature, expiration, and blacklist status.
+- **Token Structure**: Minimal JWT payload with user_id, role ("Passenger", "Driver", or "Analyst"), and standard claims (exp, iat).
+- **Token Refresh**: Provides token refresh mechanism for extending session duration.
+- **Logout**: Adds tokens to blacklist in Redis, making them immediately invalid.
+- **Authentication Delegation**: Receives authentication requests from Gateway and delegates credential verification to User Service.
 
 ### User Service
 
-- **Registration**: Users sign up with name, phone number, email, and password. Password is hashed before storage. Default role "User" is assigned.
-- **Authentication Support**: Provides credential verification endpoint for Auth Service during login.
-- **Profile Management**: Users can view, update (name, phone number, email), change password, or soft-delete their profiles.
-- **Role Management**: Admin functionality to assign "Analyst" role to users (manual process via admin interface).
-- **Order Management**: 
-  - Initiate taxi orders through Order Service
+- **Registration**: All users (passengers, drivers, analysts) register through this service with name, phone number, email, password, and role ("Passenger", "Driver", or "Analyst"). Password is hashed before storage.
+- **Authentication Support**: Provides credential verification endpoint for Auth Service during login process.
+- **Profile Management**: Users can view and update basic profile information (name, phone number, email), change password, or soft-delete their profiles.
+- **User Data API**: Provides user information to other services (Driver Service, Order Service, etc.) via internal APIs.
+- **Order Integration**: 
+  - Passengers can initiate taxi orders through Order Service
   - View order history and status
   - Rate completed trips
 - **Wallet Integration**: Interface with Wallet Service for balance checks and payment operations.
-- **Authentication**: All operations require valid JWT token validated through Auth Service.
+- **Internal API**: All operations are called internally by Gateway Service after authentication and authorization.
 
 ### Driver Service
 
-- **Registration**: Drivers sign up with name, phone number, email, password, and taxi type. Password is hashed before storage. Role "Driver" is assigned.
-- **Authentication Support**: Provides credential verification endpoint for Auth Service during login.
-- **Profile Management**: Drivers can view, update profile information, and change password.
-- **Status Management**: Drivers can toggle their availability status (free/busy/offline).
+- **Driver Profile Management**: Manages driver-specific information linked to User Service via user_id:
+  - Taxi type (Economy, Comfort, Business)
+  - Vehicle information (make, model, year, license plate, color)
+  - Driver license information (number, expiration date, category)
+  - Insurance and registration documents
+- **Driver Status Management**: 
+  - Toggle availability status (free/busy/offline)
+  - Location tracking and updates
+  - Working hours and schedule management
 - **Trip Management**: 
   - Accept/decline trip requests from Order Service
-  - Update trip status (started, completed)
-  - Rate completed trips
-- **Rating System**: View calculated rating based on last 20 trips.
-- **Wallet Integration**: Interface with Wallet Service for balance and earnings.
-- **Authentication**: All operations require valid JWT token validated through Auth Service.
+  - Update trip status (started, en route, completed)
+  - Rate passengers after completed trips
+- **Rating System**: 
+  - Maintains and calculates driver ratings based on trip feedback
+  - Stores rating history and statistics
+- **Driver Analytics**: 
+  - Trip statistics (completed trips, earnings, ratings)
+  - Performance metrics and reports
+- **Integration with User Service**: 
+  - Validates user existence and "Driver" role before creating driver profile
+  - Synchronizes basic user data changes
+- **Integration with Order Service**: 
+  - Provides driver availability and location data
+  - Handles trip assignment and status updates
+- **Internal API**: All operations are called internally by Gateway Service after authentication and authorization.
 
 ### Order Service
 
@@ -64,15 +91,15 @@ The application consists of six microservices, each handling specific functional
   - Stores complete trip history with ratings and comments
 - **Driver Assignment**: 
   - Implements driver matching algorithm based on location, taxi type, and rating
-  - Manages driver queue and availability
-  - Handles driver acceptance/rejection logic
+  - Manages driver queue and availability by communicating with Driver Service
+  - Handles driver acceptance/rejection logic through Driver Service
 - **Pricing Engine**: 
   - Calculates trip cost based on distance, time, taxi type, and surge pricing
   - Manages pricing configuration
 - **Trip History**: Stores all trip data including routes, timestamps, costs, and ratings.
 - **Search & Analytics**: Provides search functionality for users with "Analyst" role.
 - **Payment Integration**: Coordinates with Wallet Service for payment processing.
-- **Authentication**: Role-based access control for different operations.
+- **Internal API**: All operations are called internally by Gateway Service after authentication and authorization.
 
 ### Analytic Service
 
@@ -81,27 +108,25 @@ The application consists of six microservices, each handling specific functional
 - **Ratings Analytics**: Aggregated ratings for drivers and overall service quality.
 - **Reports**: Generates business reports for stakeholders.
 - **Real-time Dashboards**: Provides real-time metrics for operations monitoring.
-- **Authentication**: Access restricted to users with "Analyst" role.
+- **Internal API**: All operations are called internally by Gateway Service after role validation (restricted to "Analyst" role).
 
 ### Wallet Service
 
 - **Wallet Creation**: 
-  - Automatically creates personal wallets upon user/driver registration
+  - Automatically creates personal wallets upon user registration (Passenger and Driver Role)
   - Creates family wallets upon user request
 - **Family Wallet Management**: 
   - Adds/removes members by phone number
   - Manages ownership and permissions
 - **Transaction Management**: 
-  - Processes payments with two-phase commit (reserve → confirm/cancel)
   - Maintains transaction history with detailed status tracking
   - Handles refunds and cancellations
 - **Balance Management**: 
   - Real-time balance checking
-  - Cash-in operations with payment gateway integration
+  - Cash-in operations
 - **Security**: 
-  - Transaction verification and fraud detection
   - Audit logging for all financial operations
-- **Authentication**: Internal service authentication for secure inter-service communication.
+- **Internal API**: All operations are called internally by Gateway Service or other services after proper authentication.
 
 ## Nonfunctional Requirements
 
@@ -125,21 +150,30 @@ The application consists of six microservices, each handling specific functional
 
 ### Service-Specific Technical Stack
 
+#### Gateway Service
+- **Reverse Proxy**: nginx with Lua scripting for custom logic
+- **Configuration**: nginx.conf with upstream definitions and location blocks
+- **Authentication**: JWT validation via Auth Service HTTP calls
+- **Load Balancing**: nginx upstream with health checks
+- **Monitoring**: nginx access logs and metrics
+- **Security**: Rate limiting, CORS, security headers
+
 #### User Service
-- **Database**: PostgreSQL for user profiles and authentication data
+- **Database**: MongoDB for all user profiles and authentication data
 - **HTTP Framework**: Gin
-- **Database Layer**: sqlc for type-safe SQL, squirrel for query building
-- **Migrations**: go-migrate
+- **Database Layer**: MongoDB Go driver (go.mongodb.org/mongo-driver) for database operations
+- **Migrations**: MongoDB migrations with custom migration scripts
 - **Testing**: testify, gomock, dockertest for integration tests
 - **Frontend**: Vue.js 3 with Composition API and Pinia for state management
 
 #### Driver Service
-- **Database**: PostgreSQL for driver profiles (consistency with User Service)
+- **Database**: MongoDB for driver-specific information (linked to User Service via user_id)
 - **HTTP Framework**: Gin
-- **Database Layer**: sqlc and squirrel
-- **Migrations**: go-migrate
-- **Testing**: testify, gomock, dockertest
-- **Frontend**: Vue.js 3 (consistent with User Service)
+- **Database Layer**: MongoDB Go driver (go.mongodb.org/mongo-driver) for database operations
+- **Migrations**: MongoDB migrations with custom migration scripts
+- **Testing**: testify, gomock, dockertest for integration tests
+- **Location Services**: Integration with mapping services for location tracking
+- **Frontend**: Vue.js 3 for driver management interface
 
 #### Order Service
 - **Database**: PostgreSQL for transactional data
@@ -171,13 +205,14 @@ The application consists of six microservices, each handling specific functional
 
 ## Technical Requirements
 
-- **Inter-Service Communication**: gRPC for synchronous calls, Kafka for asynchronous events
-- **API Gateway**: Optional Kong or similar for external API management
+- **Inter-Service Communication**: HTTP/gRPC for synchronous calls, Kafka for asynchronous events
+- **API Gateway**: Mandatory nginx-based Gateway Service for all external API access
 - **Message Broker**: Kafka for event-driven architecture
 - **Containerization**: Docker with multi-stage builds
 - **Orchestration**: Kubernetes with proper resource limits and health checks
 - **Security**: 
   - TLS for all communications
+  - JWT-based authentication handled by Gateway Service
   - Secrets management with Kubernetes Secrets
   - Regular security audits
 - **Code Quality**: 
@@ -188,47 +223,68 @@ The application consists of six microservices, each handling specific functional
   - Database query optimization
   - Caching strategies (Redis)
   - Connection pooling
+  - nginx-based load balancing and caching
 
 ## Authentication Flow
 
 ### Registration
-1. User/Driver sends registration data to respective service
-2. Service validates data and stores hashed password
-3. Service creates default role assignment
-4. Service triggers wallet creation via Wallet Service
-5. Service publishes user_registered event to Analytics
+1. Client sends registration data (including role: "Passenger" or "Driver") to Gateway Service
+2. Gateway Service routes request to User Service
+3. User Service validates data and stores hashed password with role
+4. If role is "Driver", User Service triggers Driver Service to create driver profile with user_id
+5. Driver Service stores driver-specific information (vehicle, license, etc.)
+6. User Service triggers wallet creation via Wallet Service
+7. User Service publishes user_registered event to Analytics
 
 ### Login
-1. Client sends credentials to Auth Service
-2. Auth Service delegates verification to User/Driver Service
-3. User/Driver Service validates credentials (email/phone + password)
-4. On success, Auth Service receives user ID and roles
-5. Auth Service issues JWT token with user ID and roles
-6. Token is cached in Redis with TTL
+1. Client sends credentials to Gateway Service
+2. Gateway Service routes login request to Auth Service
+3. Auth Service delegates credential verification to User Service
+4. User Service validates credentials (email/phone + password)
+5. On success, Auth Service receives user ID and single role
+6. Auth Service issues JWT token with user ID and role
+7. Token is cached in Redis with TTL
 
-### Request Authentication
-1. Client includes JWT token in Authorization header
-2. Target service validates token via Auth Service
+### Request Authentication & Authorization
+1. Client includes JWT token in Authorization header for all requests
+2. Gateway Service validates token via Auth Service
 3. Auth Service checks token validity (signature, expiration, blacklist)
-4. Auth Service returns user ID and roles if valid
-5. Target service enforces role-based permissions
+4. Auth Service returns user ID and role if valid
+5. Gateway Service enforces role-based permissions for the requested endpoint
+6. If authorized, Gateway Service routes request to target service
+7. Target service processes request without additional authentication checks
 
 ### Logout
-1. Client sends logout request to Auth Service
-2. Auth Service adds token to blacklist in Redis
-3. Token becomes immediately invalid
+1. Client sends logout request to Gateway Service
+2. Gateway Service routes request to Auth Service
+3. Auth Service adds token to blacklist in Redis
+4. Token becomes immediately invalid across all services
 
 ## Inter-Service Communication Patterns
 
-### Synchronous (gRPC)
-- Auth validation requests
-- Wallet balance checks
-- Driver availability queries
+### External Client Communication
+- All client requests go through Gateway Service
+- Gateway handles authentication via Auth Service
+- Gateway enforces role-based access control
+- Gateway routes requests to appropriate services
+
+### Synchronous (gRPC/HTTP)
+- Gateway to Auth Service for token validation
+- Gateway to target services for request routing
+- Service-to-service calls for business logic:
+  - Order → Driver Service (driver availability, location, trip assignment)
+  - Order → User Service (user data, passenger information)
+  - Order → Wallet Service (payment processing)
+  - User → Driver Service (driver profile creation for new drivers)
+  - Driver → User Service (user validation and basic data)
 - Real-time data requirements
 
 ### Asynchronous (Kafka Events)
-- User/Driver registration
+- User registration events
+- Driver profile creation/updates
+- Driver status changes (availability, location)
 - Order status changes
+- Trip completion events
 - Payment completions
 - Analytics data collection
 
