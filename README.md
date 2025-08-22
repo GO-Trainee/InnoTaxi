@@ -316,18 +316,11 @@ The application consists of seven microservices, each handling specific function
 
 ### Phase 1: Architecture Foundation
 1. **Project Structure Setup**
-    - check file link
-    - better to do in drawio
+    - check draw io
 
 ### Phase 2: Database Design
 2. **Database Schema Creation**
-   - Design PostgreSQL schemas for each service:
-     - **User Service**
-     - **Driver Service**
-     - **Order Service**
-     - **Wallet Service**
-   - Design Redis schemas for Auth Service
-   - Design ClickHouse schemas for Analytic Service
+   - Design schemas for each service:
    - Document table relationships and constraints
    - better to do in drawio
 
