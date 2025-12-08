@@ -103,11 +103,7 @@ The application consists of seven microservices, each handling specific function
   - Processes payments via immediate deduction with compensatory rollback for cancellations.
   - Maintains transaction history with detailed status tracking
   - Handles refunds and cancellations
-- **Balance Management**: 
-  - Real-time balance checking
-  - Cash-in operations with payment gateway integration
 - **Security**: 
-  - Transaction verification and fraud detection
   - Audit logging for all financial operations
 - **Authentication**: Internal service authentication for secure inter-service communication. Role validation is handled by Gateway Service.
 
