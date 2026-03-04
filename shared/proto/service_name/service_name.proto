@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+
+service ServiceNameService {
+  rpc CreateRequested(CreateRequestedRequest) returns (InvoiceResponse) ;
+}
+
+message CreateRequestedRequest {
+  int64 organization_id = 1;
+  string note = 2 ;
+  double funds_amount = 3;
+  FeeType fee_type = 4;
+}
+
+message InvoiceResponse {
+  Invoice invoice = 1;
+}
+
+
+enum Status {
+  INVOICE_STATUS_UNSPECIFIED = 0;
+  // 1 is reserved for INVOICE_STATUS_DRAFT but we don't send this status to the client.
+  INVOICE_STATUS_REQUESTED = 2;
+  INVOICE_STATUS_INVOICED = 3;
+  INVOICE_STATUS_PAID = 4;
+  INVOICE_STATUS_PARTIALLY_PAID = 5;
+  INVOICE_STATUS_VOIDED = 6;
+}
+
+enum FeeType {
+  INVOICE_FEE_TYPE_UNSPECIFIED = 0;
+  INVOICE_FEE_TYPE_TRANSACTION_FEE = 1;
+  INVOICE_FEE_TYPE_AFFILIATE_FEE = 2;
+}
