@@ -1,8 +1,27 @@
 syntax = "proto3";
 
+import "google/api/annotations.proto";
 
 service ServiceNameService {
-  rpc CreateRequested(CreateRequestedRequest) returns (InvoiceResponse) ;
+  // HTTP + gRPC: accessible via both transports.
+  // gRPC-Gateway exposes this as POST /v1/invoices (JSON body → protobuf → gRPC).
+  rpc CreateRequested(CreateRequestedRequest) returns (InvoiceResponse) {
+    option (google.api.http) = {
+      post: "/v1/invoices"
+      body: "*"
+    };
+  }
+
+  // gRPC only: no google.api.http annotation → not exposed over HTTP.
+  rpc FindDriverByStatus(FindDriverByStatusRequest) returns (FindDriverByStatusResponse);
+}
+
+message FindDriverByStatusRequest {
+  Status status = 1;
+}
+
+message FindDriverByStatusResponse {
+  repeated int64 driver_ids = 1;
 }
 
 message CreateRequestedRequest {
@@ -31,4 +50,15 @@ enum FeeType {
   INVOICE_FEE_TYPE_UNSPECIFIED = 0;
   INVOICE_FEE_TYPE_TRANSACTION_FEE = 1;
   INVOICE_FEE_TYPE_AFFILIATE_FEE = 2;
+}
+
+enum FeeFreeStatus {
+  FEE_FREE_STATUS_UNSPECIFIED = 0;
+  FEE_FREE_STATUS_ACTIVE = 1;
+  FEE_FREE_STATUS_ARCHIVED = 2;
+  FEE_FREE_STATUS_EXPIRE_SOON = 3;
+  FEE_FREE_STATUS_COMPLETED = 4;
+  FEE_FREE_STATUS_EXPIRED = 5;
+  FEE_FREE_STATUS_NO_FEE_FREE = 6;
+  FEE_FREE_STATUS_PENDING_COMPLETION = 7;
 }

@@ -2,6 +2,8 @@ package types
 
 import (
 	"database/sql/driver"
+
+	pbentity "awesomeProject/shared/proto/service_name"
 )
 
 type FinanceInvoiceStatus int
@@ -27,13 +29,12 @@ const (
 )
 
 var (
-	financeInvoiceStatusToPBMap = map[FinanceInvoiceStatus]int32{
-		// FinanceInvoiceStatusDraft is not expected in response
-		FinanceInvoiceStatusRequested:     2,
-		FinanceInvoiceStatusInvoiced:      3,
-		FinanceInvoiceStatusPaid:          4,
-		FinanceInvoiceStatusPartiallyPaid: 5,
-		FinanceInvoiceStatusVoided:        6,
+	financeInvoiceStatusToPBMap = map[FinanceInvoiceStatus]pbentity.Status{
+		FinanceInvoiceStatusRequested:     pbentity.Status_INVOICE_STATUS_REQUESTED,
+		FinanceInvoiceStatusInvoiced:      pbentity.Status_INVOICE_STATUS_INVOICED,
+		FinanceInvoiceStatusPaid:          pbentity.Status_INVOICE_STATUS_PAID,
+		FinanceInvoiceStatusPartiallyPaid: pbentity.Status_INVOICE_STATUS_PARTIALLY_PAID,
+		FinanceInvoiceStatusVoided:        pbentity.Status_INVOICE_STATUS_VOIDED,
 	}
 
 	financeInvoiceStatusToStringMap = map[FinanceInvoiceStatus]string{
@@ -54,13 +55,12 @@ var (
 		FinanceInvoiceStatusVoidedString:        FinanceInvoiceStatusVoided,
 	}
 
-	pbToFinanceInvoiceStatusMap = map[int32]FinanceInvoiceStatus{
-		// FinanceInvoiceStatusDraft is not expected in response
-		2: FinanceInvoiceStatusRequested,
-		3: FinanceInvoiceStatusInvoiced,
-		4: FinanceInvoiceStatusPaid,
-		5: FinanceInvoiceStatusPartiallyPaid,
-		6: FinanceInvoiceStatusVoided,
+	pbToFinanceInvoiceStatusMap = map[pbentity.Status]FinanceInvoiceStatus{
+		pbentity.Status_INVOICE_STATUS_REQUESTED:      FinanceInvoiceStatusRequested,
+		pbentity.Status_INVOICE_STATUS_INVOICED:       FinanceInvoiceStatusInvoiced,
+		pbentity.Status_INVOICE_STATUS_PAID:           FinanceInvoiceStatusPaid,
+		pbentity.Status_INVOICE_STATUS_PARTIALLY_PAID: FinanceInvoiceStatusPartiallyPaid,
+		pbentity.Status_INVOICE_STATUS_VOIDED:         FinanceInvoiceStatusVoided,
 	}
 )
 
@@ -88,11 +88,11 @@ func (f FinanceInvoiceStatus) String() string {
 	return FinanceInvoiceStatusUnspecifiedString
 }
 
-func (f FinanceInvoiceStatus) ToPB() int32 {
+func (f FinanceInvoiceStatus) ToPB() pbentity.Status {
 	if pb, exists := financeInvoiceStatusToPBMap[f]; exists {
 		return pb
 	}
-	return 0
+	return pbentity.Status_INVOICE_STATUS_UNSPECIFIED
 }
 
 func FinanceInvoiceStatusFromString(s string) FinanceInvoiceStatus {
@@ -102,9 +102,9 @@ func FinanceInvoiceStatusFromString(s string) FinanceInvoiceStatus {
 	return FinanceInvoiceStatusUnspecified
 }
 
-func FinanceInvoiceStatusFromPB(financeInvoiceStatusType int32) FinanceInvoiceStatus {
-	if status, exists := pbToFinanceInvoiceStatusMap[financeInvoiceStatusType]; exists {
-		return status
+func FinanceInvoiceStatusFromPB(status pbentity.Status) FinanceInvoiceStatus {
+	if s, exists := pbToFinanceInvoiceStatusMap[status]; exists {
+		return s
 	}
 	return FinanceInvoiceStatusUnspecified
 }
