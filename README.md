@@ -13,7 +13,7 @@ The application consists of seven microservices, each handling specific function
 | Service            | Description                                                                 |
 |--------------------|-----------------------------------------------------------------------------|
 | **User Service**   | Centralized management of all user accounts (including drivers), storing authentication data, profile details, and user roles. |
-| **Driver Service** | Manages driver-specific data, driver statuses, operational availability, and tasks related to order acceptance, cancellation, and completion — all from the driver's side. Implement **after** User + Auth. **Optional:** build it with RAG + LLM over that code and this spec ([brief](driver-service-rag.md)). |
+| **Driver Service** | Manages driver-specific data, driver statuses, operational availability, and tasks related to order acceptance, cancellation, and completion — all from the driver's side. Implement **after** User + Auth. **Intern task:** RAG that grades drivers from passenger comments (`low` / `medium` / `perfect`) — [brief](driver-service-rag.md). |
 | **Order Service**  | Orchestrates taxi order creation, driver assignment, trip lifecycle, and pricing logic. |
 | **Analytic Service** | Provides statistical insights and analytics accessible to users with Analyst permissions. |
 | **Wallet Service** | Handles digital wallets, transaction history, and payment operations for both riders and drivers. |
@@ -57,7 +57,7 @@ The application consists of seven microservices, each handling specific function
 
 ### Driver Service
 
-Trainee path: implement **after** User + Auth. Writing it by hand (same as User + Auth) is enough. **Optional:** use RAG + LLM over that code and this spec — [driver-service-rag.md](driver-service-rag.md) (setup, corpus, expected result, worked example). Skipping RAG is not a fail.
+Trainee path: implement Driver Service **after** User + Auth (same house style). **Separate intern task:** build RAG over passenger comments and set each driver a grade `low` | `medium` | `perfect` — [driver-service-rag.md](driver-service-rag.md).
 
 - **Registration**: The Driver service registers data that is specific only to a driver. It is invoked by the User service when a user with the 'Driver' registration role initiates the process.
 - **Profile Management**: Drivers can view, update profile information.
@@ -151,7 +151,7 @@ Trainee path: implement **after** User + Auth. Writing it by hand (same as User 
 - **Migrations**: golang-migrate
 - **Testing**: testify, gomock, dockertest
 - **Frontend**: Vue.js 3 (consistent with User Service)
-- **Implementation method (optional)**: RAG + LLM over User/Auth + this spec, not a blank-chat one-shot. Runtime of the service is still Go/Gin/Mongo — the LLM is not in the request path. Skip this and write Driver Service by hand if you prefer. Details: [driver-service-rag.md](driver-service-rag.md)
+- **Driver grade (intern RAG)**: pipeline over trip comments → retrieve by `driver_id` → LLM + rubric → store `low` \| `medium` \| `perfect`. Details: [driver-service-rag.md](driver-service-rag.md)
 
 #### Order Service
 - **Database**: Elasticsearch for orders data
@@ -319,8 +319,9 @@ Implement **in sequence**, not all seven services at once.
 | --- | --- | --- |
 | 1 | Architecture sketches + API contracts (at least User, Auth, Driver) | Draw.io / OpenAPI / proto |
 | 2 | **User Service + Auth Service** | Hand-written. This is the house style (layers, errors, Compose, JWT). |
-| 3 | **Driver Service** | Required service. Default: hand-written, same house style as User + Auth. **Optional:** RAG + LLM — index this README plus User/Auth, retrieve, generate one slice at a time, review. Brief: [driver-service-rag.md](driver-service-rag.md). |
-| 4 | Remaining services (Order, Wallet, Analytic, Gateway) | Same architecture. If you used RAG for Driver, you may reuse the corpus. |
+| 3 | **Driver Service** | Required service. Hand-written, same house style as User + Auth. |
+| 3b | **Driver grade RAG** | Intern: index passenger comments, retrieve by driver, LLM sets `low` / `medium` / `perfect`. Brief: [driver-service-rag.md](driver-service-rag.md). Seed comments if Order Service is not ready. |
+| 4 | Remaining services (Order, Wallet, Analytic, Gateway) | Same architecture. Comments for RAG should eventually come from completed trips in Order Service. |
 
 Do not start Driver Service until User + Auth register, login, refresh, and profile work and you can explain them.
 

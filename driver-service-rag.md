@@ -1,99 +1,120 @@
-# Driver Service — RAG + LLM as the implementation foundation
+# Intern brief — RAG that grades drivers from passenger comments
 
-**This track is optional.** Driver Service itself is required. RAG + LLM is not.
+**You will build a small RAG pipeline.** After a trip, passengers leave **comments**. Your job is to retrieve those comments, let an LLM read them **together with a fixed rubric**, and set each driver a grade: **`low` | `medium` | `perfect`**.
 
-You can implement Driver Service by hand, the same way as User + Auth. That is a complete pass. Use this brief only if you *want* to try retrieval-augmented generation as the way you write the service.
+This is **not** “ask ChatGPT to write Driver Service.”  
+This is **not** a chatbot UI.  
+The LLM runs **when you grade a driver**, not on every HTTP request of the taxi app.
 
-**When:** after **User Service** and **Auth Service** are working, reviewed, and merged.  
-**What:** implement Driver Service.  
-**How (if you opt in):** do **not** write it from a blank chat with ChatGPT. Index *this* spec plus *your* User/Auth code, retrieve the relevant pieces, then generate and **review** the rest.
+---
 
-User + Auth are the house style. Driver Service must look like it belongs in the same monorepo, whether you used RAG or not.
+## What you are building (one sentence)
 
-## Why this optional track exists
-
-A raw LLM does not know your project. It will happily invent Fiber + Postgres + GORM, a different error JSON, and a different folder layout — all “correct” in the abstract, all wrong *here*.
-
-**RAG (Retrieval-Augmented Generation)** is the fix for that:
-
-1. You turn the spec and the existing services into searchable chunks (embeddings in a vector store).
-2. For each coding task you **retrieve** the closest chunks (a User handler, an Auth JWT claim, a Mongo repository, a paragraph from this README).
-3. You send **those chunks + a narrow question** to the LLM.
-4. The model writes Driver code that follows *your* patterns instead of a generic tutorial.
-
-That is the whole point of using RAG as the foundation: **ground generation in this taxi system**, not in the internet average.
-
-You still own the result. RAG is a junior pair-programmer with your repo open. It is not a merge button.
+Index passenger comments → for a given `driver_id`, retrieve that driver’s comments → send comments + rubric to the LLM → write `grade` on the driver document.
 
 ```text
-  ┌──────────────┐     embed      ┌─────────────┐
-  │ Spec README  │───────────────►│             │
-  │ User Service │                │ Vector store│
-  │ Auth Service │───────────────►│ (Qdrant)    │
-  └──────────────┘                └──────┬──────┘
-                                         │ top-k chunks
-  “toggle driver status, same            ▼
-   layering as User profile”  →  LLM  →  draft Go
-                                         │
-                                         ▼
-                                   you review, test, commit
+  ┌─────────────────────┐   embed    ┌─────────────┐
+  │ Comments (corpus)   │───────────►│ Vector store│
+  │ Grade rubric (this  │            │ (Qdrant)    │
+  │ file)               │───────────►│             │
+  └─────────────────────┘            └──────┬──────┘
+                                            │ top-k comments
+  “Grade driver <id>”  ──embed query──► search
+                                            ▼
+                                   LLM + rubric
+                                            ▼
+                              grade: low | medium | perfect
+                                            ▼
+                              save on Driver (Mongo)
 ```
 
 ---
 
-## What you must already have (from User + Auth)
+## Why RAG (and not “paste every comment into ChatGPT”)
 
-Do not start this milestone until all of this is true:
+**Retrieval-Augmented Generation** means: **find the right text first**, then generate.
 
-- [ ] User Service: register / login-support / profile, 3-layer layout (handler → service → repository), MongoDB, Gin
-- [ ] Auth Service: access + refresh JWT, Redis, `/refresh`, logout
-- [ ] A user with role `Driver` can be created through User Service (even if Driver Service is still a stub)
-- [ ] Shared conventions exist in the repo and you can point to them: error JSON, config via env, Docker Compose, `golangci-lint`, test layout
-- [ ] You can explain every important file in User + Auth. If you cannot, RAG will only help you copy code you do not understand
+| Without retrieval | With RAG (what we want) |
+| --- | --- |
+| You dump 2 000 comments into the prompt, hit token limits, or the model ignores old trips | You retrieve the **most relevant** comments for *this* driver (and the rubric) |
+| The model invents a 1–5 star scale or writes an essay | The model must answer with **only** `low`, `medium`, or `perfect` |
+| Grades drift every time you ask | Same rubric is always in the prompt; comments come from **your** store, not the internet |
 
-Bring these **inputs** into the RAG corpus (see below). They are the source of truth, not a new blog post about “how to write a microservice”.
+You still own the result. If the retrieved comments are wrong, the grade is wrong — **fix indexing**, do not “just generate anyway.”
 
 ---
 
-## What you need to set up
+## Grade rubric (source of truth — index this)
 
-Only if you take this optional track. Local-first. Cloud APIs are optional. **No API keys in git.**
+The LLM must **not** invent extra labels (`excellent`, `3 stars`, `toxic`). Only these three:
 
-### 1. LLM (the generator)
+| Grade | When to use |
+| --- | --- |
+| **`low`** | Comments are mostly negative: rude, unsafe driving, no-show, insults, “never again”, dirty car, cheating on route/price. A few polite comments do **not** cancel a pattern of harm. |
+| **`medium`** | Mixed or ordinary: on-time but quiet, small complaints (AC, music) plus some thanks, not enough evidence for `perfect` or `low`. **Default when comments are few or vague** (“ok”, “fine”). |
+| **`perfect`** | Comments are consistently positive: polite, safe, on time, clean car, helpful with bags, “best driver”. No serious safety/rudeness complaints in the retrieved set. |
+
+**Tie-breakers (put these in the prompt every time):**
+
+1. **Safety and rudeness beat praise.** One “he almost crashed” + ten “nice guy” → not `perfect`; usually `low`.
+2. **Need a pattern for `low`/`perfect`.** One short “ok” comment → `medium`.
+3. **If there are no comments** → do **not** call the LLM. Return `ungraded` (or leave `grade` empty) and a clear error: `no_comments`.
+4. **Output JSON only** (see prompt below). No markdown, no extra keys.
+
+Numeric trip stars (1–5), if you have them, are **optional extra context**. The grade is decided from **comment text**, not by averaging stars alone.
+
+---
+
+## What you must already have
+
+Do not start until this is true:
+
+- [ ] You know what a **driver** is in this project (Driver Service stores driver-only data; identity lives in User Service)
+- [ ] You understand that **comments live with trips/orders** (Order Service: completed trips can have a rating **and** a comment). If Order Service is not ready, you **seed mock comments** (see below) — do not block on Kafka
+- [ ] Docker Compose (or Docker Desktop) works on your machine
+- [ ] You can explain RAG in your own words: embed → search → prompt → generate
+
+---
+
+## What you need to set up (local-first)
+
+**No API keys in git.** Cloud LLMs are optional and only if a mentor agrees.
+
+### 1. LLM (the grader)
 
 Pick **one**:
 
 | Option | When to use | What to run |
 | --- | --- | --- |
-| **Ollama (recommended)** | default; works offline; no card | install Ollama, pull a **coding** model |
-| OpenAI / Anthropic / etc. | only if you already have a key and the mentor agrees | env var in a **gitignored** `.env` |
-
-Ollama:
+| **Ollama (recommended)** | default; works offline | install Ollama, pull a small chat model |
+| OpenAI / Anthropic | only with a key + mentor OK | env var in a **gitignored** `.env` |
 
 ```bash
 # install: https://ollama.com/download
-ollama pull qwen2.5-coder:7b    # generator (14b if your RAM allows)
-ollama pull nomic-embed-text    # embeddings for RAG
-ollama serve                    # if it is not already running
+ollama pull llama3.2          # grader (or qwen2.5:7b if you have RAM)
+ollama pull nomic-embed-text  # embeddings — required for RAG
+ollama serve                  # if it is not already running
 ```
 
-Sanity check: `ollama run qwen2.5-coder:7b "write a Go function that returns an error, nothing else"`.
+Sanity check:
 
-### 2. Embeddings (the retriever’s language)
+```bash
+ollama run llama3.2 "Reply with only the word medium"
+```
 
-Same space for index and query. Do not embed with model A and query with model B.
+### 2. Embeddings (same model for index and query)
 
-- Local: `nomic-embed-text` via Ollama (768-d)
-- Cloud: OpenAI `text-embedding-3-small` only if the LLM is also cloud
+Do not embed comments with model A and search with model B.
 
-### 3. Vector store (where chunks live)
+- Local: `nomic-embed-text` via Ollama (768 dimensions)
+- Cloud: `text-embedding-3-small` only if the LLM is also cloud
+
+### 3. Vector store
 
 | Option | When to use | What to run |
 | --- | --- | --- |
-| **Qdrant** (recommended) | you already live in Docker Compose | `docker compose` service on `6333` |
-| [chromem-go](https://github.com/philippgille/chromem-go) | zero extra containers | embedded in a small Go indexer |
-
-Example Compose service (add next to Mongo/Redis, do not publish it outside localhost):
+| **Qdrant (recommended)** | you already use Docker Compose | service on `6333`, bind to localhost |
+| [chromem-go](https://github.com/philippgille/chromem-go) | no extra container | embedded in a small Go tool |
 
 ```yaml
 qdrant:
@@ -104,211 +125,204 @@ qdrant:
     - qdrant_data:/qdrant/storage
 ```
 
-Sanity check: open `http://127.0.0.1:6333/dashboard` or `curl -s http://127.0.0.1:6333/readyz`.
+Sanity check: `http://127.0.0.1:6333/dashboard` or `curl -s http://127.0.0.1:6333/readyz`.
 
-### 4. Indexer + ask loop (you write this)
+### 4. Tool you write: `tools/driver-grade-rag/` (Go preferred)
 
-A small tool in the monorepo, for example `tools/rag/` (Go is preferred). It must:
+A small CLI or HTTP helper in the monorepo. It must:
 
-1. **Chunk** the corpus (see next section): ~400–800 tokens, overlap ~50–100, **keep file path + start line** in metadata
-2. **Embed** each chunk and upsert into Qdrant (collection e.g. `inno-taxi`)
-3. **Ask**: embed the question → search top-k (k = 6–12) → build a prompt → call Ollama/OpenAI → print answer **and** the retrieved file paths
+1. **Chunk / index comments** — one comment = one chunk (do not glue 50 trips into one blob). Metadata **must** include: `driver_id`, `comment_id` (or trip/order id), `created_at`, optional `star_rating`
+2. **Embed** each comment and upsert into Qdrant (collection e.g. `driver-comments`)
+3. **Grade:** take `driver_id` → embed a query like `passenger comments about driver {id}` **or** filter Qdrant by `driver_id` (filter is better) → take top-k (k = 8–20) → build prompt with rubric + comments → call Ollama → parse JSON → print grade **and** the comment ids used
+4. **Persist:** write `grade` + `graded_at` + `comment_ids_used` onto the driver (Driver Service Mongo, or a local JSON file if Driver Service is not ready — document which)
 
-Re-index after User/Auth changes. Stale index = confident wrong code.
+You may use [langchaingo](https://github.com/tmc/langchaingo) or call Ollama HTTP (`/api/embed`, `/api/chat`) and Qdrant REST yourself. Untitled ChatGPT tabs are not a submission.
 
-You may use [langchaingo](https://github.com/tmc/langchaingo) or call Ollama HTTP (`/api/embed`, `/api/chat`) and Qdrant REST yourself. Either is fine. A pile of untitled ChatGPT tabs is not.
-
-### 5. Driver Service runtime (same as the spec)
-
-RAG does not replace Mongo or Gin. The **running** Driver Service still needs:
-
-- MongoDB (same family as User Service; separate database/collection, not the User DB)
-- Gin, mongo-driver, golang-migrate, testify
-- Compose entry for `driver-service`
-- The User Service must be able to **call** Driver Service on driver registration (gRPC preferred; HTTP is acceptable for this milestone if gRPC is not ready yet)
-
-Trip accept/decline that needs a live Order Service: **stub the port** (interface + fake). Do not wait for Order Service.
+Re-index when comments change. Stale index = confident wrong grade.
 
 ---
 
 ## What to index (the corpus)
 
-Index **only** what should constrain the model. Garbage in, taxi-app-shaped garbage out.
+Index **only** what should affect the grade.
 
 | Include | Why |
 | --- | --- |
-| This folder: `README.md` (Driver / User / Auth / NFR / auth flow) | product rules |
-| This file | milestone rules |
-| `user-service/` (handlers, services, repos, models, errors, tests) | copy **structure**, not business fields blindly |
-| `auth-service/` (JWT claims, token payload, middleware) | Driver is a role on the same tokens |
-| `docker-compose.yml`, Makefiles, `.golangci.yml` | how we run and lint |
-| proto / OpenAPI **already in the repo** | contracts |
+| Passenger **comments** (text) keyed by `driver_id` | this is the evidence |
+| This rubric section | the model must not invent a scale |
+| Optional: 5–10 **labelled examples** you wrote (comment → expected grade) | few-shot, keeps the model consistent |
 
 | Exclude | Why |
 | --- | --- |
-| `vendor/`, `node_modules/`, binaries, `*.pb.go` if huge | noise |
-| `.env`, keys, dumps | secrets |
-| `go.sum`, lockfiles | zero design signal |
-| random RAG tutorials | the model already knows those; they **fight** your house style |
+| Driver passwords, JWTs, `.env` | secrets |
+| Full User/Auth source code | noise; this task is not “generate a microservice” |
+| Random RAG blog posts | they fight your rubric |
+| Other drivers’ comments **without** a `driver_id` filter | contaminates the grade |
 
-Chunk by file, preferably by function/type. A 2 000-line `handler.go` as one blob retrieves poorly.
+If Order Service is missing, commit **seed data**, e.g. `tools/driver-grade-rag/testdata/comments.json`:
+
+```json
+[
+  {
+    "comment_id": "c1",
+    "driver_id": "drv_01",
+    "text": "Drove like a maniac, I was scared.",
+    "star_rating": 1,
+    "created_at": "2026-08-01T10:00:00Z"
+  },
+  {
+    "comment_id": "c2",
+    "driver_id": "drv_01",
+    "text": "Never again. Rude and on the phone.",
+    "star_rating": 1,
+    "created_at": "2026-08-02T10:00:00Z"
+  },
+  {
+    "comment_id": "c3",
+    "driver_id": "drv_02",
+    "text": "On time, quiet, car was clean. Thank you!",
+    "star_rating": 5,
+    "created_at": "2026-08-03T10:00:00Z"
+  }
+]
+```
+
+Expected: `drv_01` → `low`, `drv_02` → `perfect` (if that is their only comment, `perfect` is allowed; if you only have one vague “thanks”, `medium` is safer — **follow the rubric**, and write your choice in `NOTES.md`).
 
 ---
 
-## How a single task is done (work the loop, do not one-shot the service)
+## How to implement (do not one-shot the whole pipeline)
 
-Do **one vertical slice per query**, then test, then the next slice.
+Do **one slice**, test it, then the next.
 
-Suggested order:
-
-1. Skeleton: `cmd/`, `internal/{handler,service,repository}`, config, health, Compose
-2. Driver document in Mongo (fields that are **driver-only**; identity stays in User Service)
-3. Internal **register** endpoint that User Service calls when role is `Driver`
-4. Profile get/update (JWT, role `Driver` or `Admin` — Gateway will enforce later; still check claims if the service is called directly)
-5. Status: `offline` \| `available` \| `on-trip` with allowed transitions
-6. Ports for Order Service: `AcceptTrip`, `DeclineTrip`, `StartTrip`, `CompleteTrip` — interface + in-memory fake + tests
-7. OpenAPI or proto, README, tests
+1. **Seed comments** + Qdrant collection (payload schema with `driver_id`)
+2. **Index:** read JSON (later: Mongo/Order) → embed → upsert. Log how many vectors
+3. **Retrieve-only command:** `grade-rag retrieve --driver drv_01` prints comments, **no LLM**. You must see only that driver’s texts
+4. **Grade command:** retrieve → prompt → parse JSON → print `low|medium|perfect`
+5. **Save grade** on the driver document (field `grade`)
+6. **README** for the tool: how to run, env vars, how to re-index
 
 ### Prompt shape (use this every time)
 
 ```text
-You are implementing Driver Service in the inno-taxi monorepo.
+You grade taxi drivers from passenger comments.
 
 RULES
-- Follow retrieved code: layering, package names, error JSON, env config, logging.
-- Stack: Go, Gin, mongo-driver, MongoDB. No GORM, no Postgres, no Fiber.
-- Identity lives in User Service. Driver Service stores driver-only data.
-- If retrieved context is missing a fact, say WHAT IS MISSING instead of inventing a stack.
+- Use ONLY the retrieved comments and the rubric.
+- Reply with JSON only, no markdown:
+  {"grade":"low"|"medium"|"perfect","reason":"<one short sentence>"}
+- If comments are missing or empty, you should not be called. If you still are, return grade "medium" and reason "insufficient evidence".
+- Do not mention other drivers. Do not invent comments.
 
-TASK
-<one slice, e.g. PATCH status>
+RUBRIC
+<paste the grade table + tie-breakers>
 
-RETRIEVED CONTEXT
-<paste the chunks your tool returned, with file paths>
+RETRIEVED COMMENTS FOR DRIVER <driver_id>
+<each comment: id, date, optional stars, text>
 ```
 
-Bad prompt: “Write a complete driver microservice.”  
-Good prompt: “Add `PATCH /drivers/me/status` with body `{"status":"available"}`. Mirror User Service profile handler: bind JSON, call service, map domain errors to the same HTTP error shape. Default status on register is `offline`. Forbidden: `offline` → `on-trip`.”
+Bad query: “Is this driver good?”  
+Good query: “Grade `drv_01` using only retrieved comments; output the JSON schema above.”
 
-### Worked example — why retrieval changes the output
+### Worked example
 
-**Question you type into `tools/rag`:**
+**You run:**
 
-> Implement register-from-User-Service: when User Service creates a user with role Driver, it must call Driver Service to insert a driver profile. Default status `offline`. Follow our handler → service → repository split and our Mongo error handling.
+```bash
+go run ./tools/driver-grade-rag grade --driver drv_01
+```
 
-**What a useful retrieval looks like** (illustrative paths — yours will differ):
+**Useful retrieval:**
 
-| Score | Chunk | Why it was retrieved |
-| --- | --- | --- |
-| high | `user-service/internal/handler/register.go` | same “create related aggregate” moment |
-| high | `user-service/internal/repository/user_mongo.go` | how you insert and wrap duplicate-key |
-| high | README “Driver Service / Registration” | product rule: User Service invokes Driver |
-| medium | `auth-service/.../claims.go` | `user_id` + roles in the JWT |
-| medium | User Docker Compose Mongo URI | how services find the DB |
+| Payload | Why it is useful |
+| --- | --- |
+| `c1` “Drove like a maniac…” | safety → pulls toward `low` |
+| `c2` “Rude and on the phone” | pattern, not a one-off |
 
-**What the LLM should produce:** an internal handler (not public signup), a `Driver` document keyed by `user_id`, repository insert, tests for duplicate `user_id`.
+**What the LLM should return:**
 
-**What a model *without* RAG often produces (reject this):** public `POST /drivers/register` with email+password, bcrypt, Postgres, a new JWT issuer. That duplicates Auth/User and breaks the spec.
+```json
+{"grade":"low","reason":"Multiple comments report unsafe driving and rudeness."}
+```
 
-**What you do after the draft:**
+**What a model without RAG often returns (reject this):** `"4.2/5"`, `"needs coaching"`, or a grade based on **another** driver’s comments because you forgot the `driver_id` filter.
 
-1. Read every line. Delete anything that duplicates User/Auth (login, password hash, issuing JWT).
-2. Wire User Service to call Driver Service **inside the registration path** (or outbox/event if you already have Kafka; sync call is enough for this milestone). If Driver Service is down, registration of a Driver must **fail** (no half-created drivers). Document that choice.
-3. `go test ./...` on Driver Service; hit the happy path with curl/Postman.
-4. Save the query + retrieved paths in `driver-service/rag/queries.md` (see expected result).
+**What you do after:**
 
-If top-k chunks are irrelevant (e.g. wallet comments, unrelated tests), **fix the question or the chunking**, do not “just generate anyway”.
+1. Read the retrieved comments. If they are the wrong driver, **stop** — fix filter/metadata
+2. Check JSON parse; invalid JSON = retry once, then fail the command (do not guess `perfect`)
+3. Save `grade` on the driver
+4. Log in `tools/driver-grade-rag/queries.md`: driver id, comment ids retrieved, grade, kept / edited
 
 ---
 
 ## Guardrails
 
-- One slice per LLM call. A 20-file dump is how you get inconsistent layers.
-- If the model invents a library that is not in User/Auth/`go.mod`, do not add it “because the LLM said so”.
-- Generated tests that only assert `assert.True(t, true)` are not tests.
-- You must be able to explain status transitions and why identity is not stored twice.
-- Cursor / Copilot may help **after** the corpus is indexed. They do not replace `tools/rag` **on this optional track** — the mentor will ask how retrieval worked.
+- Filter by `driver_id` in Qdrant. Semantic search alone can mix drivers with similar wording
+- Do not send PII you do not need (full passenger names, phones). Comment text + ids are enough
+- Do not fine-tune a model. Do not build LangGraph “agents”
+- Generated “tests” that only `assert.Equal(t, true, true)` do not count
+- You must be able to explain: embeddings, top-k, why `medium` is the default for weak evidence
 
 ---
 
 ## Expected result
 
-A mentor can clone the monorepo, follow Driver README, and get this without guessing.
+A mentor clones the repo, follows **your** tool README, and gets a grade without guessing.
 
-### Service (product)
+### Product
 
-- [ ] Driver Service runs via Docker Compose next to User + Auth + Mongo + Redis (+ Qdrant for the indexer, if you used it)
-- [ ] Clean architecture: handler / service / repository; no DB calls from handlers
-- [ ] Stack matches the spec: Gin, mongo-driver, MongoDB, testify
-- [ ] **Register:** User Service creates a user with role `Driver` → Driver profile exists with `user_id`, status `offline`. Repeat register for the same `user_id` is a documented conflict, not a second row
-- [ ] **Profile:** driver can get/update **driver-only** fields (e.g. taxi type Economy/Comfort/Business, license plate). Name/email/phone stay in User Service
-- [ ] **Status:** `offline` / `available` / `on-trip`; illegal transitions return 409 (or your existing domain-error mapping — **same as User Service**, not a new envelope)
-- [ ] Order-facing methods exist as a **Go interface** + fake; HTTP/gRPC handlers may be stubbed with `501` or a clear TODO **only** for live assignment from Order Service
-- [ ] No password hashing and no JWT issuance in Driver Service
-- [ ] README: how to run, how to test, env vars, how User Service finds Driver Service
+- [ ] Comments can be indexed (seed JSON is enough for the milestone)
+- [ ] `retrieve --driver <id>` returns **only** that driver’s comments
+- [ ] `grade --driver <id>` prints valid JSON with `grade` ∈ {`low`,`medium`,`perfect`} and a one-line `reason`
+- [ ] Grade is stored on the driver (`grade`, `graded_at`, list of `comment_ids_used`)
+- [ ] No comments → no LLM call; explicit `no_comments` / ungraded
+- [ ] Seed fixtures: at least one driver that grades `low` and one that grades `perfect` or `medium` (document expected grades)
 
-### RAG (process — only if you opted in)
+### Process (so we see it was actually RAG)
 
-If you skipped RAG, ignore this subsection. The product checklist above is still required.
-
-If you opted in, commit a folder, e.g. `driver-service/rag/`:
+Commit `tools/driver-grade-rag/` (name may differ) including:
 
 | File | Contents |
 | --- | --- |
-| `sources.md` | list of indexed paths, embed model name, vector DB, chunk size |
-| `queries.md` | each slice: question, **file paths retrieved**, 3–6 line note: kept / edited / rejected |
-| `NOTES.md` | one short paragraph: a case where RAG was wrong and you fixed it by hand |
+| `README.md` | run, re-index, env, Ollama model names |
+| `sources.md` | what you indexed, embed model, vector DB, chunk = one comment |
+| `queries.md` | a few `driver_id`s: retrieved comment ids, model grade, whether you overrode it |
+| `NOTES.md` | one case where retrieval or the model was wrong and you fixed it |
+| `testdata/` | seed comments |
 
-Without `rag/`, you simply did not take the optional track. That is fine. If you *did* opt in, `rag/` is how the mentor sees that retrieval actually happened — a Driver Service that “looks generated” with no corpus notes does not count as this track.
+### Quality bar
 
-### Quality bar (same as User + Auth)
-
-- `gofmt` / `golangci-lint` clean
-- unit tests for status transitions and duplicate `user_id`
-- at least one integration test with Mongo (dockertest or Compose)
-- secrets only in `.env` (gitignored)
+- Deterministic CLI (exit non-zero on Qdrant/Ollama down)
+- At least one test: given fixture comments for `drv_01`, retrieval returns those ids
+- Secrets only in `.env` (gitignored)
 
 ---
 
-## Where to read (do this before writing `tools/rag`)
+## Where to read (before writing code)
 
 Read **in this order**. Official docs over random Medium posts.
 
-### Ideas (short)
+1. [Retrieval-augmented generation — Wikipedia](https://en.wikipedia.org/wiki/Retrieval-augmented_generation) — retrieve, then generate
+2. [Pinecone: What is RAG](https://www.pinecone.io/learn/retrieval-augmented-generation/) — embeddings + top-k
+3. [Ollama](https://github.com/ollama/ollama) — `pull`, `/api/embed`, `/api/chat`
+4. [Qdrant quickstart](https://qdrant.tech/documentation/quickstart/) — collections, payload **filters**, search
+5. [nomic-embed-text](https://ollama.com/library/nomic-embed-text)
 
-1. [Retrieval-augmented generation — Wikipedia](https://en.wikipedia.org/wiki/Retrieval-augmented_generation) — vocabulary: retrieve, then generate  
-2. [Anthropic: Contextual retrieval](https://www.anthropic.com/news/contextual-retrieval) — why naive chunking fails; you do not need their product  
-3. [Pinecone: What is RAG](https://www.pinecone.io/learn/retrieval-augmented-generation/) — embeddings + top-k, diagrams  
+Optional: [langchaingo](https://github.com/tmc/langchaingo), [chromem-go](https://github.com/philippgille/chromem-go).
 
-Optional depth: [OpenAI — RAG](https://help.openai.com/en/articles/8868588-retrieval-augmented-generation-rag-and-semantic-search) if you use their API.
-
-### Things you actually run
-
-4. [Ollama](https://github.com/ollama/ollama) — install, `pull`, `/api/embed`, `/api/chat`  
-5. [Qdrant quickstart](https://qdrant.tech/documentation/quickstart/) — collections, upsert, search  
-6. [nomic-embed-text](https://ollama.com/library/nomic-embed-text) — local embeddings  
-
-### Go
-
-7. [langchaingo](https://github.com/tmc/langchaingo) — optional; Ollama + vector stores  
-8. [chromem-go](https://github.com/philippgille/chromem-go) — optional embedded store  
-9. Your **User Service** — this is the main style guide. Read it like a library.
-
-### Not required
-
-LangGraph, agents with 12 tools, fine-tuning, “build a chatbot UI”. The driver app does not need an LLM **at runtime**. If you opt in, RAG is how **you** write the service.
+**Not required:** LangGraph, fine-tuning, a chat UI, generating Driver Service from User/Auth.
 
 ---
 
-## Suggested time (extra, on top of writing Driver Service)
-
-Skip this table if you are not doing RAG.
+## Suggested time
 
 | Block | Time |
 | --- | --- |
-| Read the RAG links + sketch chunk/ask | 0.5–1 day |
-| `tools/rag` index + one demo query that retrieves `register.go` | 1–2 days |
-| Driver slices 1–5 with the loop | 4–8 days |
-| Tests, Compose, `rag/` writeup, PR | 1–2 days |
+| Read this brief + RAG links; sketch payload schema | 0.5 day |
+| Qdrant + Ollama + index seed comments | 1 day |
+| Retrieve-by-`driver_id` (no LLM) + tests | 0.5–1 day |
+| Grade prompt + JSON parse + save `grade` | 1–2 days |
+| Writeup (`queries.md`, `NOTES.md`), PR | 0.5 day |
 
-If retrieval never returns User Service files, stop generating and fix the indexer (or drop the optional track and finish Driver Service by hand).
+If retrieval returns another driver’s comments, **stop grading** and fix metadata/filters.
