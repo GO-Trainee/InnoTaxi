@@ -13,7 +13,7 @@ The application consists of seven microservices, each handling specific function
 | Service            | Description                                                                 |
 |--------------------|-----------------------------------------------------------------------------|
 | **User Service**   | Centralized management of all user accounts (including drivers), storing authentication data, profile details, and user roles. |
-| **Driver Service** | Manages driver-specific data, driver statuses, operational availability, and tasks related to order acceptance, cancellation, and completion — all from the driver's side. Implement **after** User + Auth. **Intern task:** RAG that grades drivers from passenger comments (`low` / `medium` / `perfect`) — [brief](driver-service-rag.md). |
+| **Driver Service** | Manages driver-specific data, driver statuses, operational availability, and tasks related to order acceptance, cancellation, and completion — all from the driver's side. Implement **after** User + Auth. **Next task:** RAG that grades drivers from passenger comments (`low` / `medium` / `perfect`) — [brief](driver-service-rag.md). |
 | **Order Service**  | Orchestrates taxi order creation, driver assignment, trip lifecycle, and pricing logic. |
 | **Analytic Service** | Provides statistical insights and analytics accessible to users with Analyst permissions. |
 | **Wallet Service** | Handles digital wallets, transaction history, and payment operations for both riders and drivers. |
@@ -57,7 +57,7 @@ The application consists of seven microservices, each handling specific function
 
 ### Driver Service
 
-Trainee path: implement Driver Service **after** User + Auth (same house style). **Separate intern task:** build RAG over passenger comments and set each driver a grade `low` | `medium` | `perfect` — [driver-service-rag.md](driver-service-rag.md).
+Implement Driver Service **after** User + Auth (same house style). **Separate task:** build RAG over passenger comments and set each driver a grade `low` | `medium` | `perfect` — [driver-service-rag.md](driver-service-rag.md).
 
 - **Registration**: The Driver service registers data that is specific only to a driver. It is invoked by the User service when a user with the 'Driver' registration role initiates the process.
 - **Profile Management**: Drivers can view, update profile information.
@@ -151,7 +151,7 @@ Trainee path: implement Driver Service **after** User + Auth (same house style).
 - **Migrations**: golang-migrate
 - **Testing**: testify, gomock, dockertest
 - **Frontend**: Vue.js 3 (consistent with User Service)
-- **Driver grade (intern RAG)**: pipeline over trip comments → retrieve by `driver_id` → LLM + rubric → store `low` \| `medium` \| `perfect`. Details: [driver-service-rag.md](driver-service-rag.md)
+- **Driver grade (RAG)**: pipeline over trip comments → retrieve by `driver_id` → LLM + rubric → store `low` \| `medium` \| `perfect`. Details: [driver-service-rag.md](driver-service-rag.md)
 
 #### Order Service
 - **Database**: Elasticsearch for orders data
