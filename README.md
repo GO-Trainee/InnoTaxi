@@ -49,9 +49,7 @@ The application consists of seven microservices, each handling specific function
 - **Authentication Support**: Provides credential verification endpoint for Auth Service during login.
 - **Profile Management**: Users can view, update (name, phone number, email), change password, or soft-delete their profiles.
 - **Role Management**: Admin functionality to assign "Analyst" role to users (manual process via admin interface).
-- **Rating System**: View calculated rating based on last 20 trips. For both users and drivers.
-- **Order Management**: 
-  
+- **Rating System**: View calculated rating based on last 20 trips. For both users and drivers  
 - **Wallet Integration**: Interface with Wallet Service for balance checks and payment operations.
 - **Authentication**: All operations require valid JWT token. Role validation is handled by Gateway Service.
 
