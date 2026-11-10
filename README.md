@@ -13,7 +13,7 @@ The application consists of seven microservices, each handling specific function
 | Service            | Description                                                                 |
 |--------------------|-----------------------------------------------------------------------------|
 | **User Service**   | Centralized management of all user accounts (including drivers), storing authentication data, profile details, and user roles. |
-| **Driver Service** | Manages driver-specific data, driver statuses, operational availability, and tasks related to order acceptance, cancellation, and completion — all from the driver's side. Implement **after** User + Auth. **Next task:** RAG that grades drivers from passenger comments (`low` / `medium` / `perfect`) — [brief](driver-service-rag.md). |
+| **Driver Service** | Manages driver-specific data, driver statuses, operational availability, and tasks related to order acceptance, cancellation, and completion — all from the driver's side. Implement **after** User + Auth. **Optional task (can be skipped):** RAG that grades drivers from passenger comments (`low` / `medium` / `perfect`) — [brief](driver-service-rag.md). |
 | **Order Service**  | Orchestrates taxi order creation, driver assignment, trip lifecycle, and pricing logic. |
 | **Analytic Service** | Provides statistical insights and analytics accessible to users with Analyst permissions. |
 | **Wallet Service** | Handles digital wallets, transaction history, and payment operations for both riders and drivers. |
@@ -30,15 +30,16 @@ The application consists of seven microservices, each handling specific function
   - Issues short-lived access tokens (15-30 minutes) containing user ID and roles (e.g., ["User", "Analyst", "Driver", "Admin"])
   - Issues long-lived refresh tokens (7-30 days) for token renewal
   - Stores active tokens in Redis
-- **Token Validation**: Validates access tokens by checking signature, expiration, and active status in redis. Returns user ID and roles if token is valid.
+- **Token Validation**: Validates access tokens by checking signature, expiration, and active status in redis. Returns user ID and roles if token is valid. Exposed as a REST endpoint for Gateway Service.
 - **Token Refresh**: Provides `/refresh` endpoint to exchange valid refresh tokens for new access tokens without requiring re-authentication.
 - **Session Management**: Manages token pairs, provides logout functionality that invalidates both access and refresh tokens.
 
 ### Gateway Service
 
-- **Request Routing**: Routes incoming requests to appropriate microservices based on URL patterns and business logic.
+- **Communication**: Gateway talks to all internal services over REST (HTTP) only. Gateway does not use gRPC. Exception: Order Service GraphQL requests are proxied as plain HTTP.
+- **Request Routing**: Routes incoming requests to appropriate microservices over REST based on URL patterns and business logic.
 - **Role-Based Access Control**: Validates user roles and enforces access policies before forwarding requests to target services.
-- **Token Validation**: Validates JWT tokens through Auth Service and extracts user information for authorization decisions.
+- **Token Validation**: Validates JWT tokens through the Auth Service REST endpoint and extracts user information for authorization decisions.
 - **Load Balancing**: Distributes requests across multiple instances of backend services.
 - **Rate Limiting**: Implements rate limiting policies to prevent abuse and ensure fair usage.
 - **Request/Response Transformation**: Handles request/response transformations and API versioning if needed.
@@ -55,7 +56,7 @@ The application consists of seven microservices, each handling specific function
 
 ### Driver Service
 
-Implement Driver Service **after** User + Auth (same house style). **Separate task:** build RAG over passenger comments and set each driver a grade `low` | `medium` | `perfect` — [driver-service-rag.md](driver-service-rag.md).
+Implement Driver Service **after** User + Auth (same house style). **Optional task (can be skipped):** build RAG over passenger comments and set each driver a grade `low` | `medium` | `perfect` — [driver-service-rag.md](driver-service-rag.md).
 
 - **Registration**: The Driver service registers data that is specific only to a driver. It is invoked by the User service when a user with the 'Driver' registration role initiates the process.
 - **Profile Management**: Drivers can view, update profile information.
@@ -149,7 +150,7 @@ Implement Driver Service **after** User + Auth (same house style). **Separate ta
 - **Migrations**: golang-migrate
 - **Testing**: testify, gomock, dockertest
 - **Frontend**: Vue.js 3 (consistent with User Service)
-- **Driver grade (RAG)**: pipeline over trip comments → retrieve by `driver_id` → LLM + rubric → store `low` \| `medium` \| `perfect`. Details: [driver-service-rag.md](driver-service-rag.md)
+- **Driver grade (RAG, optional — can be skipped)**: pipeline over trip comments → retrieve by `driver_id` → LLM + rubric → store `low` \| `medium` \| `perfect`. Details: [driver-service-rag.md](driver-service-rag.md)
 
 #### Order Service
 - **Database**: Elasticsearch for orders data
@@ -184,15 +185,15 @@ Implement Driver Service **after** User + Auth (same house style). **Separate ta
 
 #### Gateway Service
 - **Gateway Platform**: NGINX (used as the primary API gateway)
-- **Routing**: Configured via NGINX location blocks and upstreams for directing traffic to appropriate services depending on user role
-- **Authentication**: JWT validation via Auth service
+- **Routing**: Configured via NGINX location blocks and upstreams for directing traffic to appropriate services depending on user role; requests are proxied to services over REST (HTTP)
+- **Authentication**: JWT validation via Auth Service REST endpoint
 - **Rate Limiting**: Rate limiting using NGINX modules (limit_req, e.g.)
 - **Load Balancing**: Built-in NGINX load balancing strategies 
 - **Testing**: Integration tests using HTTP clients
 
 ## Technical Requirements
 
-- **Inter-Service Communication**: gRPC for synchronous calls, Kafka for asynchronous events
+- **Inter-Service Communication**: REST (HTTP) for all calls from Gateway Service to other services (Order Service GraphQL is proxied as plain HTTP); gRPC for synchronous calls between internal services; Kafka for asynchronous events
 - **API Gateway**: Custom Gateway Service handles all external API requests and routing
 - **Message Broker**: Kafka for event-driven architecture
 - **Containerization**: Docker with multi-stage builds
@@ -230,10 +231,10 @@ Implement Driver Service **after** User + Auth (same house style). **Separate ta
 
 ### Request Authentication
 1. Client sends request with access token in Authorization header to Gateway Service
-2. Gateway Service validates access token via Auth Service
+2. Gateway Service validates access token via Auth Service REST endpoint
 3. Auth Service checks access token validity (signature, expiration, redis)
 4. Auth Service returns user ID and roles if valid
-5. Gateway Service enforces role-based permissions and routes request to target service
+5. Gateway Service enforces role-based permissions and routes request to target service over REST
 6. Target service processes request without additional authentication checks
 
 ### Token Refresh
@@ -251,9 +252,14 @@ Implement Driver Service **after** User + Auth (same house style). **Separate ta
 
 ## Inter-Service Communication Patterns
 
-### Synchronous (gRPC)
+### Synchronous (REST)
 - Gateway to Auth Service for token validation
 - Gateway to target services for request forwarding
+- Gateway uses REST only, never gRPC
+- Exception: Order Service GraphQL requests are proxied by Gateway as plain HTTP
+
+### Synchronous (gRPC)
+- Calls between internal services only (Gateway is not involved)
 - Wallet balance checks
 - Driver availability queries
 - Real-time data requirements
@@ -318,8 +324,8 @@ Implement **in sequence**, not all seven services at once.
 | 1 | Architecture sketches + API contracts (at least User, Auth, Driver) | Draw.io / OpenAPI / proto |
 | 2 | **User Service + Auth Service** | Hand-written. This is the house style (layers, errors, Compose, JWT). |
 | 3 | **Driver Service** | Required service. Hand-written, same house style as User + Auth. |
-| 3b | **Driver grade RAG** | Intern: index passenger comments, retrieve by driver, LLM sets `low` / `medium` / `perfect`. Brief: [driver-service-rag.md](driver-service-rag.md). Seed comments if Order Service is not ready. |
-| 4 | Remaining services (Order, Wallet, Analytic, Gateway) | Same architecture. Comments for RAG should eventually come from completed trips in Order Service. |
+| 3b | **Driver grade RAG (optional, can be skipped)** | Intern: index passenger comments, retrieve by driver, LLM sets `low` / `medium` / `perfect`. Brief: [driver-service-rag.md](driver-service-rag.md). Seed comments if Order Service is not ready. |
+| 4 | Remaining services (Order, Wallet, Analytic, Gateway) | Same architecture. If RAG is done, its comments should eventually come from completed trips in Order Service. |
 
 Do not start Driver Service until User + Auth register, login, refresh, and profile work and you can explain them.
 
